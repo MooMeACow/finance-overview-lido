@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Finance Overview",
+    "slug": "finance-overview",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": ["expo-sqlite"]
+  }
+}

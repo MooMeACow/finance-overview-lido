@@ -1,0 +1,27 @@
+Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance
+Card Payment,Current,2026-08-30 14:55:41,2026-09-01 10:08:35,Spill,-10.00,0.00,EUR,COMPLETED,11.98
+Topup,Current,2026-09-02 20:28:31,2026-09-02 20:28:32,Apple Pay top-up by *1234,30.00,0.00,EUR,COMPLETED,41.98
+Exchange,Current,2026-09-02 20:30:05,2026-09-02 20:30:05,Transfer to Revolut Digital Assets Europe Ltd,-0.44,0.00,EUR,COMPLETED,41.54
+Card Payment,Current,2026-09-02 20:30:04,2026-09-03 14:00:05,Anthropic,-21.78,0.00,EUR,COMPLETED,19.76
+Card Payment,Current,2026-09-04 11:29:40,,Connect4shore,-0.01,0.00,EUR,REVERTED,
+Exchange,Current,2026-09-04 11:29:41,2026-09-04 11:29:41,Transfer to Revolut Digital Assets Europe Ltd,-1.98,0.00,EUR,COMPLETED,17.78
+Topup,Current,2026-09-04 12:44:07,2026-09-04 12:44:09,Apple Pay top-up by *1234,30.00,0.00,EUR,COMPLETED,47.78
+Transfer,Current,2026-09-04 12:44:45,2026-09-04 12:45:47,International Transfer to Jane Doe,-29.00,0.88,EUR,COMPLETED,17.90
+Topup,Current,2026-09-07 07:21:13,2026-09-07 07:21:14,Apple Pay top-up by *1234,40.00,0.00,EUR,COMPLETED,57.90
+Transfer,Current,2026-09-07 07:21:39,2026-09-07 07:26:46,International Transfer to Jane Doe,-41.43,0.88,EUR,COMPLETED,15.59
+Topup,Current,2026-09-13 13:33:47,2026-09-13 13:33:49,Apple Pay top-up by *1234,100.00,0.00,EUR,COMPLETED,115.59
+Transfer,Current,2026-09-13 13:34:13,2026-09-13 13:39:20,International Transfer to Jane Doe,-69.20,0.88,EUR,COMPLETED,45.51
+Exchange,Current,2026-09-16 11:32:30,2026-09-16 11:32:30,Transfer to Revolut Digital Assets Europe Ltd,-0.02,0.00,EUR,COMPLETED,45.49
+Exchange,Current,2026-09-17 01:57:28,2026-09-17 01:57:28,Transfer to Revolut Digital Assets Europe Ltd,-0.02,0.00,EUR,COMPLETED,45.47
+Card Payment,Current,2026-09-16 11:32:29,2026-09-17 10:29:20,Apple,-7.99,0.00,EUR,COMPLETED,37.48
+Card Payment,Current,2026-09-17 01:57:28,2026-09-17 11:55:42,Apple,-2.99,0.00,EUR,COMPLETED,34.49
+Charge,Current,2026-09-18 04:08:21,2026-09-18 04:08:21,Premium plan fee,0.00,10.99,EUR,COMPLETED,23.50
+Topup,Current,2026-09-18 13:32:55,2026-09-18 13:32:56,Apple Pay top-up by *1234,20.00,0.00,EUR,COMPLETED,43.50
+Transfer,Current,2026-09-18 13:33:17,2026-09-18 13:38:25,International Transfer to Jane Doe,-27.92,0.88,EUR,COMPLETED,14.70
+Exchange,Current,2026-09-19 09:10:19,2026-09-19 09:10:19,Transfer to Revolut Digital Assets Europe Ltd,-0.46,0.00,EUR,COMPLETED,14.24
+Card Payment,Current,2026-09-19 09:10:19,2026-09-20 10:12:48,Albert Heijn,-3.77,0.00,EUR,COMPLETED,10.47
+Topup,Current,2026-09-23 20:16:02,2026-09-23 20:16:03,Apple Pay top-up by *1234,830.00,0.00,EUR,COMPLETED,840.47
+Transfer,Current,2026-09-24 08:49:49,2026-09-24 08:54:57,International Transfer to Jane Doe,-295.59,0.88,EUR,COMPLETED,544.00
+Transfer,Current,2026-09-24 10:46:01,2026-09-24 11:50:56,To Tripper B.V.,-24.50,0.00,EUR,COMPLETED,519.50
+Transfer,Current,2026-09-24 10:49:39,2026-09-24 11:50:57,To Tripper B.V.,-24.50,0.00,EUR,COMPLETED,495.00
+Transfer,Current,2026-09-24 14:07:55,2026-09-24 14:13:04,International Transfer to Jane Doe,-84.60,0.88,EUR,COMPLETED,409.52

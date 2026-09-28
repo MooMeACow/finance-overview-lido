@@ -1,0 +1,253 @@
+/**
+ * Local SQLite storage (expo-sqlite). Everything stays on the device.
+ */
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+import type { ParsedTxn } from '../lib/importers';
+import { shiftMonth } from '../lib/dates';
+
+export const DATABASE_NAME = 'finance.db';
+
+export type Txn = {
+  id: number;
+  date: string;
+  description: string;
+  amount_cents: number;
+  currency: string;
+  category: string;
+  note: string | null;
+  excluded: number; // 1 = left out of totals (e.g. moving money between your own accounts)
+  source: string;
+  import_id: number | null;
+};
+
+export type ImportRecord = {
+  id: number;
+  file_name: string;
+  source: string;
+  imported_at: string;
+  row_count: number;
+};
+
+export type MonthTotals = { month: string; in_cents: number; out_cents: number };
+export type CategoryTotal = { category: string; out_cents: number; count: number };
+
+const SCHEMA_VERSION = 1;
+
+export async function migrate(db: SQLiteDatabase): Promise<void> {
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const version = row?.user_version ?? 0;
+  if (version >= SCHEMA_VERSION) return;
+
+  await db.execAsync(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS imports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_name TEXT NOT NULL,
+      source TEXT NOT NULL,
+      imported_at TEXT NOT NULL,
+      row_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      description TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      category TEXT NOT NULL DEFAULT 'other',
+      note TEXT,
+      excluded INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL,
+      import_id INTEGER REFERENCES imports(id) ON DELETE CASCADE,
+      hash TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_txn_date ON transactions(date);
+    CREATE TABLE IF NOT EXISTS rules (
+      match TEXT PRIMARY KEY,
+      category TEXT NOT NULL
+    );
+    PRAGMA user_version = ${SCHEMA_VERSION};
+  `);
+}
+
+// ---------- Reading ----------
+
+export async function getRules(db: SQLiteDatabase): Promise<Map<string, string>> {
+  const rows = await db.getAllAsync<{ match: string; category: string }>('SELECT match, category FROM rules');
+  return new Map(rows.map((r) => [r.match, r.category]));
+}
+
+export async function getMonthTotals(db: SQLiteDatabase, endMonth: string, count: number): Promise<MonthTotals[]> {
+  const start = shiftMonth(endMonth, -(count - 1));
+  const rows = await db.getAllAsync<MonthTotals>(
+    `SELECT substr(date, 1, 7) AS month,
+            COALESCE(SUM(CASE WHEN amount_cents > 0 THEN amount_cents END), 0) AS in_cents,
+            COALESCE(SUM(CASE WHEN amount_cents < 0 THEN -amount_cents END), 0) AS out_cents
+       FROM transactions
+      WHERE excluded = 0 AND substr(date, 1, 7) BETWEEN ? AND ?
+      GROUP BY month`,
+    [start, endMonth],
+  );
+  const byMonth = new Map(rows.map((r) => [r.month, r]));
+  return Array.from({ length: count }, (_, i) => {
+    const month = shiftMonth(start, i);
+    return byMonth.get(month) ?? { month, in_cents: 0, out_cents: 0 };
+  });
+}
+
+export async function getCategoryTotals(db: SQLiteDatabase, month: string): Promise<CategoryTotal[]> {
+  return db.getAllAsync<CategoryTotal>(
+    `SELECT category, SUM(-amount_cents) AS out_cents, COUNT(*) AS count
+       FROM transactions
+      WHERE excluded = 0 AND amount_cents < 0 AND substr(date, 1, 7) = ?
+      GROUP BY category
+      ORDER BY out_cents DESC`,
+    [month],
+  );
+}
+
+export async function getTransactions(
+  db: SQLiteDatabase,
+  month: string,
+  opts: { search?: string; direction?: 'all' | 'in' | 'out'; category?: string } = {},
+): Promise<Txn[]> {
+  const where = ['substr(date, 1, 7) = ?'];
+  const params: (string | number)[] = [month];
+  if (opts.search?.trim()) {
+    where.push('(description LIKE ? OR note LIKE ?)');
+    const q = `%${opts.search.trim()}%`;
+    params.push(q, q);
+  }
+  if (opts.direction === 'in') where.push('amount_cents > 0');
+  if (opts.direction === 'out') where.push('amount_cents < 0');
+  if (opts.category) {
+    where.push('category = ?');
+    params.push(opts.category);
+  }
+  return db.getAllAsync<Txn>(
+    `SELECT id, date, description, amount_cents, currency, category, note, excluded, source, import_id
+       FROM transactions WHERE ${where.join(' AND ')}
+      ORDER BY date DESC, id DESC`,
+    params,
+  );
+}
+
+/** The most recent month that has data, or null if the database is empty. */
+export async function getLatestMonth(db: SQLiteDatabase): Promise<string | null> {
+  const row = await db.getFirstAsync<{ m: string | null }>('SELECT substr(MAX(date), 1, 7) AS m FROM transactions');
+  return row?.m ?? null;
+}
+
+/** Most common currency, used for formatting totals. */
+export async function getMainCurrency(db: SQLiteDatabase): Promise<string> {
+  const row = await db.getFirstAsync<{ currency: string }>(
+    'SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1',
+  );
+  return row?.currency ?? 'EUR';
+}
+
+export async function getImports(db: SQLiteDatabase): Promise<ImportRecord[]> {
+  return db.getAllAsync<ImportRecord>('SELECT * FROM imports ORDER BY id DESC LIMIT 20');
+}
+
+export async function countExisting(db: SQLiteDatabase, hashes: string[]): Promise<number> {
+  let found = 0;
+  // Chunk to stay under SQLite's parameter limit
+  for (let i = 0; i < hashes.length; i += 500) {
+    const chunk = hashes.slice(i, i + 500);
+    const row = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM transactions WHERE hash IN (${chunk.map(() => '?').join(',')})`,
+      chunk,
+    );
+    found += row?.n ?? 0;
+  }
+  return found;
+}
+
+// ---------- Writing ----------
+
+/** Inserts parsed rows, skipping ones already imported. Returns how many were added. */
+export async function importTransactions(
+  db: SQLiteDatabase,
+  fileName: string,
+  source: string,
+  txns: ParsedTxn[],
+): Promise<number> {
+  let added = 0;
+  await db.withTransactionAsync(async () => {
+    const imp = await db.runAsync(
+      'INSERT INTO imports (file_name, source, imported_at, row_count) VALUES (?, ?, datetime(\'now\', \'localtime\'), 0)',
+      [fileName, source],
+    );
+    const importId = imp.lastInsertRowId;
+    for (const t of txns) {
+      const res = await db.runAsync(
+        `INSERT OR IGNORE INTO transactions (date, description, amount_cents, currency, category, source, import_id, hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [t.date, t.description, t.amountCents, t.currency, t.category, source, importId, t.hash],
+      );
+      added += res.changes;
+    }
+    if (added === 0) {
+      await db.runAsync('DELETE FROM imports WHERE id = ?', [importId]);
+    } else {
+      await db.runAsync('UPDATE imports SET row_count = ? WHERE id = ?', [added, importId]);
+    }
+  });
+  return added;
+}
+
+export async function addManualTransaction(
+  db: SQLiteDatabase,
+  t: { date: string; description: string; amountCents: number; currency: string; category: string; note?: string },
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO transactions (date, description, amount_cents, currency, category, note, source)
+     VALUES (?, ?, ?, ?, ?, ?, 'manual')`,
+    [t.date, t.description, t.amountCents, t.currency, t.category, t.note ?? null],
+  );
+}
+
+export async function updateTransaction(
+  db: SQLiteDatabase,
+  id: number,
+  patch: { category: string; note: string | null; excluded: boolean },
+): Promise<void> {
+  await db.runAsync('UPDATE transactions SET category = ?, note = ?, excluded = ? WHERE id = ?', [
+    patch.category,
+    patch.note,
+    patch.excluded ? 1 : 0,
+    id,
+  ]);
+}
+
+/**
+ * Sets the category for every transaction with the same description and
+ * remembers it for future imports. Returns how many transactions changed.
+ */
+export async function applyCategoryToSimilar(db: SQLiteDatabase, description: string, category: string): Promise<number> {
+  const key = description.trim().toLowerCase();
+  let changed = 0;
+  await db.withTransactionAsync(async () => {
+    const res = await db.runAsync('UPDATE transactions SET category = ? WHERE lower(trim(description)) = ?', [category, key]);
+    changed = res.changes;
+    await db.runAsync('INSERT OR REPLACE INTO rules (match, category) VALUES (?, ?)', [key, category]);
+  });
+  return changed;
+}
+
+export async function deleteTransaction(db: SQLiteDatabase, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
+}
+
+export async function deleteImport(db: SQLiteDatabase, importId: number): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM transactions WHERE import_id = ?', [importId]);
+    await db.runAsync('DELETE FROM imports WHERE id = ?', [importId]);
+  });
+}
+
+export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
+  await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules;');
+}
