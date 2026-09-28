@@ -5,9 +5,9 @@
  */
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, Debt } from './types';
+import type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountLink, AccountType, Plan, Budget, Debt } from './types';
 
-export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency, Debt, DebtDirection } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountLink, AccountType, Plan, Budget, PlanFrequency, Debt, DebtDirection } from './types';
 
 /** Handle passed to every function; unused on web. */
 export type Db = unknown;
@@ -142,6 +142,14 @@ export async function getTransactions(
       return true;
     })
     .sort((a, b) => (a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1))
+    .map(publicTxn);
+}
+
+/** Transactions dated after the given day ("YYYY-MM-DD"), used to keep linked account balances up to date. */
+export async function getTransactionsAfter(_db: Db, day: string): Promise<Txn[]> {
+  return load()
+    .transactions.filter((t) => t.date.slice(0, 10) > day)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))
     .map(publicTxn);
 }
 
@@ -291,19 +299,22 @@ export async function deleteAllData(_db: Db): Promise<void> {
 
 export async function getAccounts(_db: Db): Promise<Account[]> {
   // Accounts saved before account types existed count as everyday accounts
-  return [...load().accounts].map((a) => ({ ...a, type: a.type ?? 'current' })).sort((a, b) => a.id - b.id);
+  return [...load().accounts].map((a) => ({ ...a, type: a.type ?? 'current', link: a.link ?? null })).sort((a, b) => a.id - b.id);
 }
 
 export async function saveAccount(
   _db: Db,
-  a: { id?: number; name: string; type: AccountType; balanceCents: number; currency: string },
+  /** Leave balanceCents out when editing to keep the typed-in balance and its date */
+  a: { id?: number; name: string; type: AccountType; link: AccountLink | null; balanceCents?: number; currency: string },
 ): Promise<void> {
   const data = load();
-  const fields = { name: a.name, type: a.type, balance_cents: a.balanceCents, currency: a.currency, updated_at: nowString() };
+  const base = { name: a.name, type: a.type, link: a.link, currency: a.currency };
+  const fields = a.balanceCents === undefined ? base : { ...base, balance_cents: a.balanceCents, updated_at: nowString() };
   if (a.id) {
     save({ ...data, accounts: data.accounts.map((x) => (x.id === a.id ? { ...x, ...fields } : x)) });
   } else {
-    save({ ...data, accounts: [...data.accounts, { id: data.nextAccountId, ...fields }], nextAccountId: data.nextAccountId + 1 });
+    const created = { id: data.nextAccountId, ...base, balance_cents: a.balanceCents ?? 0, updated_at: nowString() };
+    save({ ...data, accounts: [...data.accounts, created], nextAccountId: data.nextAccountId + 1 });
   }
 }
 

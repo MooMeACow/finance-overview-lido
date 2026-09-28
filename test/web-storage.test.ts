@@ -95,11 +95,11 @@ test('web storage: survives a reload', async () => {
 });
 
 test('web storage: accounts, plans, budgets', async () => {
-  await db.saveAccount(null, { name: 'Revolut', type: 'current', balanceCents: 40952, currency: 'EUR' });
-  await db.saveAccount(null, { name: 'Savings', type: 'savings', balanceCents: 100000, currency: 'EUR' });
+  await db.saveAccount(null, { name: 'Revolut', type: 'current', link: null, balanceCents: 40952, currency: 'EUR' });
+  await db.saveAccount(null, { name: 'Savings', type: 'savings', link: null, balanceCents: 100000, currency: 'EUR' });
   let accounts = await db.getAccounts(null);
   assert.deepEqual(accounts.map((a) => [a.name, a.type, a.balance_cents]), [['Revolut', 'current', 40952], ['Savings', 'savings', 100000]]);
-  await db.saveAccount(null, { id: accounts[0].id, name: 'Revolut', type: 'current', balanceCents: 50000, currency: 'EUR' });
+  await db.saveAccount(null, { id: accounts[0].id, name: 'Revolut', type: 'current', link: null, balanceCents: 50000, currency: 'EUR' });
   await db.deleteAccount(null, accounts[1].id);
   accounts = await db.getAccounts(null);
   assert.deepEqual(accounts.map((a) => a.balance_cents), [50000]);
@@ -130,7 +130,7 @@ test('web storage: data saved by the previous version still loads', async () => 
   // Force a fresh load from storage by re-importing the module under a new URL
   const fresh = await import('../src/db/database.web.ts?reload=' + Date.now());
   assert.deepEqual(await fresh.getAccounts(null), []);
-  await fresh.saveAccount(null, { name: 'Cash', type: 'current', balanceCents: 2000, currency: 'EUR' });
+  await fresh.saveAccount(null, { name: 'Cash', type: 'current', link: null, balanceCents: 2000, currency: 'EUR' });
   assert.equal((await fresh.getAccounts(null))[0].id, 1);
 });
 
@@ -171,4 +171,21 @@ test('web storage: debts', async () => {
   await db.deleteDebt(null, debts[0].id);
   debts = await db.getDebts(null);
   assert.deepEqual(debts.map((d) => [d.person, d.amount_cents, d.note]), [['Sam', 30000, 'paid €130 back']]);
+});
+
+test('web storage: editing an account without changing the balance keeps its date', async () => {
+  await db.saveAccount(null, { name: 'ING', type: 'current', link: null, balanceCents: 9500, currency: 'EUR' });
+  const [a] = await db.getAccounts(null);
+  // Pretend it was typed in a while ago
+  const raw = JSON.parse(store.get('finance-overview:v1')!);
+  raw.accounts[0].updated_at = '2026-09-01 10:00:00';
+  store.set('finance-overview:v1', JSON.stringify(raw));
+  const fresh = await import('../src/db/database.web.ts?keep-date=' + Date.now());
+  await fresh.saveAccount(null, { id: a.id, name: 'ING current', type: 'current', link: 'ing_current', currency: 'EUR' });
+  const [b] = await fresh.getAccounts(null);
+  assert.deepEqual([b.name, b.link, b.balance_cents, b.updated_at], ['ING current', 'ing_current', 9500, '2026-09-01 10:00:00']);
+  await fresh.saveAccount(null, { id: a.id, name: 'ING current', type: 'current', link: 'ing_current', balanceCents: 12000, currency: 'EUR' });
+  const [c2] = await fresh.getAccounts(null);
+  assert.equal(c2.balance_cents, 12000);
+  assert.notEqual(c2.updated_at, '2026-09-01 10:00:00');
 });

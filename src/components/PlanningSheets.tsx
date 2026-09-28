@@ -10,10 +10,13 @@ import { confirmAction, notify } from '../lib/dialogs';
 import { parseAmount, formatMoney } from '../lib/money';
 import { isValidDay, todayString } from '../lib/dates';
 import { getCategory } from '../lib/categories';
+import { ACCOUNT_LINKS, type LiveAccount } from '../lib/balances';
+import { shortDate } from '../lib/dates';
 import {
   type Account,
   type Debt,
   type DebtDirection,
+  type AccountLink,
   type AccountType,
   type Plan,
   type PlanFrequency,
@@ -31,18 +34,29 @@ const centsToInput = (cents: number) => (cents / 100).toFixed(2);
 // ---------- Account ----------
 
 /** Add or edit an account and its current balance. `account` null = new. */
-export function AccountSheet({ visible, account, onClose }: { visible: boolean; account: Account | null; onClose: () => void }) {
+export function AccountSheet({
+  visible,
+  account,
+  onClose,
+}: {
+  visible: boolean;
+  /** The account as shown, with its up-to-date balance */
+  account: (Account & Partial<LiveAccount>) | null;
+  onClose: () => void;
+}) {
   const db = useDb();
   const c = useColors();
   const { refresh, currency } = useAppState();
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('current');
+  const [link, setLink] = useState<AccountLink | null>(null);
   const [balance, setBalance] = useState('');
 
   useEffect(() => {
     if (visible) {
       setName(account?.name ?? '');
       setType(account?.type ?? 'current');
+      setLink(account?.link ?? null);
       setBalance(account ? centsToInput(account.balance_cents) : '');
     }
   }, [visible, account]);
@@ -51,7 +65,16 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
     const cents = parseAmount(balance);
     if (!name.trim()) return notify('Name the account', 'For example Revolut, ING or Cash.');
     if (cents === null) return notify('Enter the balance', 'For example 1250.00 (use a minus sign if it is negative).');
-    await saveAccount(db, { id: account?.id, name: name.trim(), type, balanceCents: cents, currency: account?.currency ?? currency });
+    // Only a changed balance becomes a new starting point; otherwise keep the old one and its date
+    const balanceChanged = !account || cents !== account.balance_cents;
+    await saveAccount(db, {
+      id: account?.id,
+      name: name.trim(),
+      type,
+      link,
+      balanceCents: balanceChanged ? cents : undefined,
+      currency: account?.currency ?? currency,
+    });
     refresh();
     onClose();
   };
@@ -88,7 +111,22 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
           style={[inputStyle(c), styles.bigInput]}
         />
         <Text style={[styles.hint, { color: c.textSecondary }]}>
-          Check your bank app and type what's there now. Update it whenever you like.
+          {account?.change_count
+            ? `You typed ${formatMoney(account.entered_cents ?? 0)} on ${shortDate(account.updated_at)}; ${account.change_count} imported transaction${account.change_count === 1 ? '' : 's'} since then changed it by ${formatMoney(account.change_cents ?? 0, 'EUR', 'always')}. Change the amount only if it doesn't match your bank app.`
+            : "Check your bank app and type what's there now. Update it whenever you like."}
+        </Text>
+      </View>
+      <View>
+        <FieldLabel>Update automatically from imported statements</FieldLabel>
+        <View style={styles.chips}>
+          {[{ key: null, label: "Don't update automatically", hint: 'Only the balance you type in' }, ...ACCOUNT_LINKS].map((l) => (
+            <Chip key={l.key ?? 'none'} label={l.label} selected={link === l.key} onPress={() => setLink(l.key as AccountLink | null)} />
+          ))}
+        </View>
+        <Text style={[styles.hint, { color: c.textSecondary }]}>
+          {link
+            ? `${ACCOUNT_LINKS.find((l) => l.key === link)!.hint} dated after the day you last typed in the balance are added to it.`
+            : 'Pick the statements that belong to this account to keep its balance up to date when you import them.'}
         </Text>
       </View>
       <Button label="Save" onPress={save} />

@@ -6,16 +6,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, Debt } from './types';
+import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, AccountLink, AccountType, Plan, Budget, Debt } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency, Debt, DebtDirection } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountLink, AccountType, Plan, Budget, PlanFrequency, Debt, DebtDirection } from './types';
 
 /** Handle passed to every function; on web this is unused. */
 export type Db = SQLiteDatabase;
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 export async function migrate(db: Db): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -98,6 +98,11 @@ export async function migrate(db: Db): Promise<void> {
     `);
   }
 
+  if (version < 5) {
+    // Accounts can be kept up to date from imported statements
+    await db.execAsync('ALTER TABLE accounts ADD COLUMN link TEXT');
+  }
+
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
@@ -164,6 +169,15 @@ export async function getTransactions(
 }
 
 /** The most recent month that has data, or null if the database is empty. */
+/** Transactions dated after the given day ("YYYY-MM-DD"), used to keep linked account balances up to date. */
+export async function getTransactionsAfter(db: Db, day: string): Promise<Txn[]> {
+  return db.getAllAsync<Txn>(
+    `SELECT id, date, description, amount_cents, currency, category, note, excluded, source, import_id
+       FROM transactions WHERE substr(date, 1, 10) > ? ORDER BY date`,
+    [day],
+  );
+}
+
 export async function getLatestMonth(db: Db): Promise<string | null> {
   const row = await db.getFirstAsync<{ m: string | null }>('SELECT substr(MAX(date), 1, 7) AS m FROM transactions');
   return row?.m ?? null;
@@ -304,17 +318,20 @@ export async function getAccounts(db: Db): Promise<Account[]> {
 
 export async function saveAccount(
   db: Db,
-  a: { id?: number; name: string; type: AccountType; balanceCents: number; currency: string },
+  /** Leave balanceCents out when editing to keep the typed-in balance and its date */
+  a: { id?: number; name: string; type: AccountType; link: AccountLink | null; balanceCents?: number; currency: string },
 ): Promise<void> {
-  if (a.id) {
+  if (a.id && a.balanceCents === undefined) {
+    await db.runAsync('UPDATE accounts SET name = ?, type = ?, link = ?, currency = ? WHERE id = ?', [a.name, a.type, a.link, a.currency, a.id]);
+  } else if (a.id) {
     await db.runAsync(
-      "UPDATE accounts SET name = ?, type = ?, balance_cents = ?, currency = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
-      [a.name, a.type, a.balanceCents, a.currency, a.id],
+      "UPDATE accounts SET name = ?, type = ?, link = ?, balance_cents = ?, currency = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+      [a.name, a.type, a.link, a.balanceCents, a.currency, a.id],
     );
   } else {
     await db.runAsync(
-      "INSERT INTO accounts (name, type, balance_cents, currency, updated_at) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))",
-      [a.name, a.type, a.balanceCents, a.currency],
+      "INSERT INTO accounts (name, type, link, balance_cents, currency, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))",
+      [a.name, a.type, a.link, a.balanceCents ?? 0, a.currency],
     );
   }
 }

@@ -8,6 +8,7 @@ Built with React Native and Expo (SDK 57).
 
 **Dashboard**
 - **Key numbers**: overall total, total in current accounts, total in savings & investments, and your expected balance in 6 months. You type in each account's balance and type (current, or savings & investments) and update it whenever you like. The accounts list is grouped by type with subtotals.
+- **Balances that follow your statements**: link an account to your ING current, ING savings (Oranje Spaarrekening), ING investment, Revolut current or Revolut crypto statements. Imported transactions dated after the day you typed in the balance are added to it automatically. Transfers between your own accounts move money from one account to the other, so the overall total stays right. Editing the name or link keeps the balance date; typing a new balance starts over from that day.
 - **Expected balance for the next 6 months**, based on your accounts, planned income and expenses, and budgets. Tap a month to see how it adds up; you're warned if it's expected to drop below zero.
 - **Coming up**: everything planned in the next 30 days.
 - **Plans**: recurring (monthly or yearly) and one-off expenses and income, e.g. rent, salary, a trip.
@@ -119,6 +120,7 @@ src/lib/categories.ts        Categories and auto-categorization rules
 src/lib/importers.ts         Revolut and generic bank CSV import
 src/lib/forecast.ts          Plan dates, upcoming items and the balance forecast
 src/lib/setupFile.ts         Plans file (plans, budgets, debts) format and import
+src/lib/balances.ts          Account balances kept up to date from imported statements
 src/screens/                 Dashboard, Monthly, Transactions, Import
 src/components/              UI building blocks, charts, tables, sheets/side panels
 src/layout.ts                Breakpoints for the responsive layout

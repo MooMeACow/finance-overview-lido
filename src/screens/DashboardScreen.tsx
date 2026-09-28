@@ -10,8 +10,9 @@ import { useLayout } from '../layout';
 import { useAppState } from '../state';
 import { useDb } from '../db/provider';
 import { formatMoney } from '../lib/money';
-import { dayLabel, monthLabel, todayString } from '../lib/dates';
+import { dayLabel, monthLabel, shortDate, todayString } from '../lib/dates';
 import { getCategory } from '../lib/categories';
+import { earliestLinkedDay, linkLabel, liveBalances, type LiveAccount } from '../lib/balances';
 import { buildForecast, frequencyLabel, monthlyEquivalent, upcoming } from '../lib/forecast';
 import {
   type Account,
@@ -24,6 +25,7 @@ import {
   getCategoryTotals,
   getDebts,
   getPlans,
+  getTransactionsAfter,
 } from '../db/database';
 
 export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }) {
@@ -34,7 +36,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const today = todayString();
   const thisMonth = today.slice(0, 7);
 
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<LiveAccount[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [spent, setSpent] = useState<CategoryTotal[]>([]);
@@ -43,7 +45,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const [selectedForecast, setSelectedForecast] = useState(thisMonth);
 
   // Sheets
-  const [accountSheet, setAccountSheet] = useState<{ open: boolean; account: Account | null }>({ open: false, account: null });
+  const [accountSheet, setAccountSheet] = useState<{ open: boolean; account: LiveAccount | null }>({ open: false, account: null });
   const [planSheet, setPlanSheet] = useState<{ open: boolean; plan: Plan | null; kind: 'expense' | 'income' }>({ open: false, plan: null, kind: 'expense' });
   const [budgetSheet, setBudgetSheet] = useState<{ open: boolean; budget: Budget | null }>({ open: false, budget: null });
 
@@ -57,8 +59,11 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
         getCategoryTotals(db, thisMonth),
         getDebts(db),
       ]);
+      // Linked accounts: add imported transactions dated after their balance day
+      const since = earliestLinkedDay(a);
+      const recent = since ? await getTransactionsAfter(db, since) : [];
       if (!alive) return;
-      setAccounts(a);
+      setAccounts(liveBalances(a, recent));
       setPlans(p);
       setBudgets(b);
       setSpent(s);
@@ -167,7 +172,13 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{a.name}</Text>
-                      <Text style={[styles.rowSub, { color: c.textMuted }]}>Updated {a.updated_at.slice(0, 10)}</Text>
+                      <Text style={[styles.rowSub, { color: c.textMuted }]} numberOfLines={1}>
+                        {a.link
+                          ? a.change_count > 0
+                            ? `${formatMoney(a.change_cents, a.currency, 'always')} from statements since ${shortDate(a.updated_at, false)}`
+                            : `Auto-updates from ${linkLabel(a.link)?.split(' (')[0]} · since ${shortDate(a.updated_at, false)}`
+                          : `Typed in on ${shortDate(a.updated_at)}`}
+                      </Text>
                     </View>
                     <Text style={[styles.amount, { color: c.text }]}>{formatMoney(a.balance_cents, a.currency)}</Text>
                   </HoverRow>

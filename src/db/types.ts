@@ -35,12 +35,18 @@ export type CategoryTotal = { category: string; out_cents: number; count: number
 
 export type AccountType = 'current' | 'savings';
 
+/** Which imported statements keep this account's balance up to date */
+export type AccountLink = 'ing_current' | 'ing_savings' | 'ing_investment' | 'revolut_current' | 'revolut_crypto';
+
 /** A bank account, savings account, cash, etc. The balance is entered by you. */
 export type Account = {
   id: number;
   name: string;
   /** 'current' = everyday money; 'savings' = savings and investments */
   type: AccountType;
+  /** Optional: imported statements that update the balance automatically */
+  link: AccountLink | null;
+  /** The balance you typed in, valid on the day of `updated_at` */
   balance_cents: number;
   currency: string;
   updated_at: string;
