@@ -15,7 +15,6 @@ import { getCategory } from '../lib/categories';
 import { earliestLinkedDay, linkLabel, liveBalances, type LiveAccount } from '../lib/balances';
 import { buildForecast, frequencyLabel, monthlyEquivalent, upcoming } from '../lib/forecast';
 import {
-  type Account,
   type Budget,
   type CategoryTotal,
   type Debt,
