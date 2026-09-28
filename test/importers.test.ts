@@ -136,7 +136,11 @@ test('ING: transfers between own accounts are not counted', () => {
   assert.ok(own.every((t) => ['savings', 'transfers'].includes(t.category)));
   assert.equal(own.filter((t) => t.description === 'Top-up to Revolut').length, 6);
   assert.ok(own.some((t) => t.description === 'Round-up to savings'));
-  assert.ok(own.some((t) => t.description === 'Oranje Spaarrekening' && t.amountCents === -100000));
+  assert.ok(own.some((t) => t.description === 'To savings (Oranje Spaarrekening)' && t.amountCents === -100000));
+  const fromSavings = own.filter((t) => t.description === 'From savings (Oranje Spaarrekening)');
+  assert.equal(fromSavings.length, 8);
+  assert.ok(fromSavings.every((t) => t.amountCents > 0));
+  assert.equal(fromSavings.reduce((s, t) => s + t.amountCents, 0), 170009);
 
   const counted = txns.filter((t) => !t.excluded);
   const inSum = counted.filter((t) => t.amountCents > 0).reduce((s, t) => s + t.amountCents, 0);

@@ -162,6 +162,13 @@ export function cleanIngName(name: string, notes: string): string {
   return n.trim();
 }
 
+/** Savings and investment transfers get a name that says which way the money went. */
+function directionalName(name: string, rawName: string, notes: string, out: boolean): string {
+  if (/oranje spaarrekening/i.test(rawName)) return out ? 'To savings (Oranje Spaarrekening)' : 'From savings (Oranje Spaarrekening)';
+  if (/beleggingsrek/i.test(notes)) return out ? 'To investment account' : 'From investment account';
+  return name;
+}
+
 export function parseIng(table: Table, rules?: Rules): ParseResult {
   const cols = ING_COLUMNS[ingLanguage(table.headers) ?? 'en'];
   const col = (name: string) => table.headers.indexOf(name);
@@ -193,7 +200,7 @@ export function parseIng(table: Table, rules?: Rules): ParseResult {
     const rawName = (r[c.name] ?? '').trim();
     const notes = c.notes >= 0 ? (r[c.notes] ?? '').trim() : '';
     const type = c.type >= 0 ? (r[c.type] ?? '').trim().toLowerCase() : '';
-    const description = cleanIngName(rawName, notes);
+    const description = directionalName(cleanIngName(rawName, notes), rawName, notes, out);
 
     // Money moved between your own accounts: savings, round-ups, investments, top-ups to Revolut
     const text = `${rawName} ${notes}`.toLowerCase();
