@@ -6,52 +6,81 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
+import type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
+export type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; on web this is unused. */
 export type Db = SQLiteDatabase;
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 export async function migrate(db: Db): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;
 
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-    CREATE TABLE IF NOT EXISTS imports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      file_name TEXT NOT NULL,
-      source TEXT NOT NULL,
-      imported_at TEXT NOT NULL,
-      row_count INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      date TEXT NOT NULL,
-      description TEXT NOT NULL,
-      amount_cents INTEGER NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'EUR',
-      category TEXT NOT NULL DEFAULT 'other',
-      note TEXT,
-      excluded INTEGER NOT NULL DEFAULT 0,
-      source TEXT NOT NULL,
-      import_id INTEGER REFERENCES imports(id) ON DELETE CASCADE,
-      hash TEXT UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_txn_date ON transactions(date);
-    CREATE TABLE IF NOT EXISTS rules (
-      match TEXT PRIMARY KEY,
-      category TEXT NOT NULL
-    );
-    PRAGMA user_version = ${SCHEMA_VERSION};
-  `);
+  if (version < 1) {
+    await db.execAsync(`
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE IF NOT EXISTS imports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        file_name TEXT NOT NULL,
+        source TEXT NOT NULL,
+        imported_at TEXT NOT NULL,
+        row_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL,
+        description TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        currency TEXT NOT NULL DEFAULT 'EUR',
+        category TEXT NOT NULL DEFAULT 'other',
+        note TEXT,
+        excluded INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL,
+        import_id INTEGER REFERENCES imports(id) ON DELETE CASCADE,
+        hash TEXT UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_txn_date ON transactions(date);
+      CREATE TABLE IF NOT EXISTS rules (
+        match TEXT PRIMARY KEY,
+        category TEXT NOT NULL
+      );
+    `);
+  }
+
+  if (version < 2) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        balance_cents INTEGER NOT NULL DEFAULT 0,
+        currency TEXT NOT NULL DEFAULT 'EUR',
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        description TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        category TEXT NOT NULL DEFAULT 'other',
+        frequency TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT
+      );
+      CREATE TABLE IF NOT EXISTS budgets (
+        category TEXT PRIMARY KEY,
+        limit_cents INTEGER NOT NULL
+      );
+    `);
+  }
+
+  await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
 
 // ---------- Reading ----------
@@ -232,5 +261,70 @@ export async function deleteImport(db: Db, importId: number): Promise<void> {
 }
 
 export async function deleteAllData(db: Db): Promise<void> {
-  await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules;');
+  await db.execAsync(
+    'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM accounts; DELETE FROM plans; DELETE FROM budgets;',
+  );
+}
+
+// ---------- Accounts, plans, budgets ----------
+
+export async function getAccounts(db: Db): Promise<Account[]> {
+  return db.getAllAsync<Account>('SELECT * FROM accounts ORDER BY id');
+}
+
+export async function saveAccount(
+  db: Db,
+  a: { id?: number; name: string; balanceCents: number; currency: string },
+): Promise<void> {
+  if (a.id) {
+    await db.runAsync(
+      "UPDATE accounts SET name = ?, balance_cents = ?, currency = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+      [a.name, a.balanceCents, a.currency, a.id],
+    );
+  } else {
+    await db.runAsync(
+      "INSERT INTO accounts (name, balance_cents, currency, updated_at) VALUES (?, ?, ?, datetime('now', 'localtime'))",
+      [a.name, a.balanceCents, a.currency],
+    );
+  }
+}
+
+export async function deleteAccount(db: Db, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM accounts WHERE id = ?', [id]);
+}
+
+export async function getPlans(db: Db): Promise<Plan[]> {
+  return db.getAllAsync<Plan>('SELECT * FROM plans ORDER BY kind DESC, amount_cents DESC');
+}
+
+export async function savePlan(db: Db, p: Omit<Plan, 'id'> & { id?: number }): Promise<void> {
+  const values = [p.kind, p.description, p.amount_cents, p.category, p.frequency, p.start_date, p.end_date];
+  if (p.id) {
+    await db.runAsync(
+      'UPDATE plans SET kind = ?, description = ?, amount_cents = ?, category = ?, frequency = ?, start_date = ?, end_date = ? WHERE id = ?',
+      [...values, p.id],
+    );
+  } else {
+    await db.runAsync(
+      'INSERT INTO plans (kind, description, amount_cents, category, frequency, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      values,
+    );
+  }
+}
+
+export async function deletePlan(db: Db, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM plans WHERE id = ?', [id]);
+}
+
+export async function getBudgets(db: Db): Promise<Budget[]> {
+  return db.getAllAsync<Budget>('SELECT category, limit_cents FROM budgets ORDER BY limit_cents DESC');
+}
+
+/** Sets a category's monthly budget; pass null to remove it. */
+export async function setBudget(db: Db, category: string, limitCents: number | null): Promise<void> {
+  if (limitCents === null) {
+    await db.runAsync('DELETE FROM budgets WHERE category = ?', [category]);
+  } else {
+    await db.runAsync('INSERT OR REPLACE INTO budgets (category, limit_cents) VALUES (?, ?)', [category, limitCents]);
+  }
 }

@@ -1,44 +1,55 @@
 import { useColorScheme } from 'react-native';
 
 /**
- * Colors: warm neutral surfaces, ink for text, and two validated chart colors
- * (money in = blue, money out = orange) that stay distinguishable for
- * colorblind users in both light and dark mode.
+ * Blue theme. Surfaces are cool, lightly blue-tinted neutrals; the primary
+ * color and the dashboard's hero card are deep blues. Chart colors (money in =
+ * blue, money out = orange) are validated to stay distinguishable for
+ * colorblind users in light and dark mode.
  */
 const light = {
-  background: '#f9f9f7',
-  card: '#fcfcfb',
-  cardBorder: 'rgba(11,11,11,0.08)',
-  text: '#0b0b0b',
-  textSecondary: '#52514e',
-  textMuted: '#898781',
-  hairline: '#e1e0d9',
-  baseline: '#c3c2b7',
+  background: '#f3f6fb',
+  card: '#ffffff',
+  cardBorder: 'rgba(13,54,107,0.08)',
+  text: '#0d1b2e',
+  textSecondary: '#4a5a70',
+  textMuted: '#7d8a9c',
+  hairline: '#e2e8f0',
+  baseline: '#c5cfdc',
   positive: '#006300', // text color for money in
   seriesIn: '#2a78d6',
   seriesOut: '#eb6834',
-  track: '#f0efec',
-  primary: '#0b0b0b',
+  track: '#eaf0f7',
+  primary: '#1c5cab',
   onPrimary: '#ffffff',
+  accentSoft: '#e3edfa',
+  hero: '#184f95',
+  heroText: '#ffffff',
+  heroMuted: 'rgba(255,255,255,0.78)',
+  heroPill: 'rgba(255,255,255,0.14)',
   danger: '#d03b3b',
-  backdrop: 'rgba(0,0,0,0.35)',
+  backdrop: 'rgba(8,20,40,0.4)',
 };
 
 const dark: typeof light = {
-  background: '#0d0d0d',
-  card: '#1a1a19',
-  cardBorder: 'rgba(255,255,255,0.08)',
-  text: '#ffffff',
-  textSecondary: '#c3c2b7',
-  textMuted: '#898781',
-  hairline: '#2c2c2a',
-  baseline: '#383835',
+  background: '#0a1220',
+  card: '#111c2e',
+  cardBorder: 'rgba(255,255,255,0.07)',
+  text: '#f2f6fb',
+  textSecondary: '#b7c3d3',
+  textMuted: '#7d8a9c',
+  hairline: '#1e2a3d',
+  baseline: '#2c3a50',
   positive: '#0ca30c',
   seriesIn: '#3987e5',
   seriesOut: '#d95926',
-  track: '#262624',
-  primary: '#ffffff',
-  onPrimary: '#0b0b0b',
+  track: '#18253a',
+  primary: '#256abf',
+  onPrimary: '#ffffff',
+  accentSoft: '#152a47',
+  hero: '#1c5cab',
+  heroText: '#ffffff',
+  heroMuted: 'rgba(255,255,255,0.78)',
+  heroPill: 'rgba(255,255,255,0.14)',
   danger: '#e66767',
   backdrop: 'rgba(0,0,0,0.6)',
 };

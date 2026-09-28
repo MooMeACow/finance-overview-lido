@@ -5,9 +5,9 @@
  */
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
+import type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
 
-export type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
+export type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; unused on web. */
 export type Db = unknown;
@@ -21,11 +21,27 @@ type Data = {
   transactions: StoredTxn[];
   imports: ImportRecord[];
   rules: Record<string, string>;
+  accounts: Account[];
+  plans: Plan[];
+  budgets: Budget[];
   nextTxnId: number;
   nextImportId: number;
+  nextAccountId: number;
+  nextPlanId: number;
 };
 
-const empty = (): Data => ({ transactions: [], imports: [], rules: {}, nextTxnId: 1, nextImportId: 1 });
+const empty = (): Data => ({
+  transactions: [],
+  imports: [],
+  rules: {},
+  accounts: [],
+  plans: [],
+  budgets: [],
+  nextTxnId: 1,
+  nextImportId: 1,
+  nextAccountId: 1,
+  nextPlanId: 1,
+});
 
 let cache: Data | null = null;
 
@@ -249,4 +265,60 @@ export async function deleteImport(_db: Db, importId: number): Promise<void> {
 
 export async function deleteAllData(_db: Db): Promise<void> {
   save(empty());
+}
+
+// ---------- Accounts, plans, budgets ----------
+
+export async function getAccounts(_db: Db): Promise<Account[]> {
+  return [...load().accounts].sort((a, b) => a.id - b.id);
+}
+
+export async function saveAccount(
+  _db: Db,
+  a: { id?: number; name: string; balanceCents: number; currency: string },
+): Promise<void> {
+  const data = load();
+  const fields = { name: a.name, balance_cents: a.balanceCents, currency: a.currency, updated_at: nowString() };
+  if (a.id) {
+    save({ ...data, accounts: data.accounts.map((x) => (x.id === a.id ? { ...x, ...fields } : x)) });
+  } else {
+    save({ ...data, accounts: [...data.accounts, { id: data.nextAccountId, ...fields }], nextAccountId: data.nextAccountId + 1 });
+  }
+}
+
+export async function deleteAccount(_db: Db, id: number): Promise<void> {
+  const data = load();
+  save({ ...data, accounts: data.accounts.filter((a) => a.id !== id) });
+}
+
+export async function getPlans(_db: Db): Promise<Plan[]> {
+  // Same order as SQLite: income first, then by amount (largest first)
+  return [...load().plans].sort((a, b) =>
+    a.kind === b.kind ? b.amount_cents - a.amount_cents : a.kind === 'income' ? -1 : 1,
+  );
+}
+
+export async function savePlan(_db: Db, p: Omit<Plan, 'id'> & { id?: number }): Promise<void> {
+  const data = load();
+  const { id, ...fields } = p;
+  if (id) {
+    save({ ...data, plans: data.plans.map((x) => (x.id === id ? { ...x, ...fields } : x)) });
+  } else {
+    save({ ...data, plans: [...data.plans, { id: data.nextPlanId, ...fields }], nextPlanId: data.nextPlanId + 1 });
+  }
+}
+
+export async function deletePlan(_db: Db, id: number): Promise<void> {
+  const data = load();
+  save({ ...data, plans: data.plans.filter((p) => p.id !== id) });
+}
+
+export async function getBudgets(_db: Db): Promise<Budget[]> {
+  return [...load().budgets].sort((a, b) => b.limit_cents - a.limit_cents);
+}
+
+export async function setBudget(_db: Db, category: string, limitCents: number | null): Promise<void> {
+  const data = load();
+  const others = data.budgets.filter((b) => b.category !== category);
+  save({ ...data, budgets: limitCents === null ? others : [...others, { category, limit_cents: limitCents }] });
 }

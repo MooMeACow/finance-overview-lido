@@ -80,3 +80,43 @@ test('web storage: survives a reload', async () => {
   const saved = JSON.parse(store.get('finance-overview:v1')!);
   assert.equal(saved.transactions.length, 25);
 });
+
+test('web storage: accounts, plans, budgets', async () => {
+  await db.saveAccount(null, { name: 'Revolut', balanceCents: 40952, currency: 'EUR' });
+  await db.saveAccount(null, { name: 'Savings', balanceCents: 100000, currency: 'EUR' });
+  let accounts = await db.getAccounts(null);
+  assert.deepEqual(accounts.map((a) => [a.name, a.balance_cents]), [['Revolut', 40952], ['Savings', 100000]]);
+  await db.saveAccount(null, { id: accounts[0].id, name: 'Revolut', balanceCents: 50000, currency: 'EUR' });
+  await db.deleteAccount(null, accounts[1].id);
+  accounts = await db.getAccounts(null);
+  assert.deepEqual(accounts.map((a) => a.balance_cents), [50000]);
+
+  const base = { category: 'housing', frequency: 'monthly' as const, start_date: '2026-10-01', end_date: null };
+  await db.savePlan(null, { ...base, kind: 'expense', description: 'Rent', amount_cents: 80000 });
+  await db.savePlan(null, { ...base, kind: 'income', description: 'Salary', amount_cents: 250000, category: 'income' });
+  let plans = await db.getPlans(null);
+  assert.deepEqual(plans.map((p) => p.description), ['Salary', 'Rent']);
+  await db.savePlan(null, { ...plans[1], amount_cents: 85000 });
+  await db.deletePlan(null, plans[0].id);
+  plans = await db.getPlans(null);
+  assert.deepEqual(plans.map((p) => [p.description, p.amount_cents]), [['Rent', 85000]]);
+
+  await db.setBudget(null, 'groceries', 30000);
+  await db.setBudget(null, 'groceries', 35000);
+  await db.setBudget(null, 'eating_out', 10000);
+  assert.deepEqual(await db.getBudgets(null), [{ category: 'groceries', limit_cents: 35000 }, { category: 'eating_out', limit_cents: 10000 }]);
+  await db.setBudget(null, 'eating_out', null);
+  assert.equal((await db.getBudgets(null)).length, 1);
+
+  await db.deleteAllData(null);
+  assert.equal((await db.getAccounts(null)).length, 0);
+});
+
+test('web storage: data saved by the previous version still loads', async () => {
+  store.set('finance-overview:v1', JSON.stringify({ transactions: [], imports: [], rules: {}, nextTxnId: 1, nextImportId: 1 }));
+  // Force a fresh load from storage by re-importing the module under a new URL
+  const fresh = await import('../src/db/database.web.ts?reload=' + Date.now());
+  assert.deepEqual(await fresh.getAccounts(null), []);
+  await fresh.saveAccount(null, { name: 'Cash', balanceCents: 2000, currency: 'EUR' });
+  assert.equal((await fresh.getAccounts(null))[0].id, 1);
+});

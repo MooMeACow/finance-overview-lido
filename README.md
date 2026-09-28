@@ -6,14 +6,27 @@ Built with React Native and Expo (SDK 57).
 
 ## Features
 
-- **Monthly overview**: net result, money in vs out, a 6-month chart (tap a month to open it), spending by category, and your biggest expenses.
+**Dashboard**
+- **Total money** across your accounts (Revolut, savings, cash…). You type in each balance and update it whenever you like.
+- **Expected balance for the next 6 months**, based on your accounts, planned income and expenses, and budgets. Tap a month to see how it adds up; you're warned if it's expected to drop below zero.
+- **Coming up**: everything planned in the next 30 days.
+- **Plans**: recurring (monthly or yearly) and one-off expenses and income, e.g. rent, salary, a trip.
+- **Monthly budgets** per category, with progress for the current month.
+
+**Monthly**
+- Net result, money in vs out, a 6-month chart (tap a month to open it), spending by category with budget progress, and your biggest expenses.
+
+**Transactions and import**
 - **CSV import**: Revolut statements are recognised automatically. For any other bank you match the columns once (date, description, amount, and optionally an in/out column like ING's "Af Bij"). Dutch and English number and date formats are supported.
 - **No duplicates**: importing the same file twice only adds what's new. Two genuinely identical payments in one file are both kept.
-- **Categories that learn**: transactions are auto-categorized by simple keyword rules. When you change a category, you can apply it to all transactions with the same description, and future imports remember it.
+- **Categories that learn**: when you change a category, you can apply it to all transactions with the same description, and future imports remember it.
 - **Leave out of totals**: mark transfers between your own accounts so they aren't counted as income or spending.
-- **Manual entries**: add cash payments or anything else by hand.
-- **Undo an import**: remove everything a specific import added.
-- Light and dark mode.
+- **Manual entries** and **undo an import**.
+- Blue theme with light and dark mode.
+
+### How the forecast works
+
+Expected balance = your accounts' total today + planned income − planned expenses − what's left of your monthly budgets. For the current month only items from today onward count. It only knows what you enter, so it's an estimate. Budgets are meant for day-to-day spending; don't also budget for things you've added as planned expenses (like rent), or they'll be counted twice.
 
 ## Run it (web)
 
@@ -71,7 +84,7 @@ nodeLinker: hoisted
 
 ## Tests
 
-The CSV parsing, amount/date handling, Revolut import and the web storage are covered by tests that run with Node's built-in test runner (Node 22+):
+The CSV parsing, amount/date handling, Revolut import, forecast and web storage are covered by tests that run with Node's built-in test runner (Node 22+):
 
 ```bash
 pnpm test
@@ -96,9 +109,10 @@ src/lib/dates.ts             Date parsing and month helpers
 src/lib/dialogs.ts           Confirm/alert dialogs that also work in the browser
 src/lib/categories.ts        Categories and auto-categorization rules
 src/lib/importers.ts         Revolut and generic bank CSV import
-src/screens/                 Overview, Transactions, Import
+src/lib/forecast.ts          Plan dates, upcoming items and the balance forecast
+src/screens/                 Dashboard, Monthly, Transactions, Import
 src/components/              UI building blocks, chart, sheets
-test/                        Parser tests
+test/                        Tests (import, forecast, web storage)
 ```
 
 ## Notes and limitations

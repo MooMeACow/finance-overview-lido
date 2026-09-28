@@ -23,3 +23,29 @@ export type ImportRecord = {
 
 export type MonthTotals = { month: string; in_cents: number; out_cents: number };
 export type CategoryTotal = { category: string; out_cents: number; count: number };
+
+/** A bank account, savings account, cash, etc. The balance is entered by you. */
+export type Account = {
+  id: number;
+  name: string;
+  balance_cents: number;
+  currency: string;
+  updated_at: string;
+};
+
+export type PlanFrequency = 'monthly' | 'yearly' | 'once';
+
+/** A planned future expense or income: recurring (rent, salary) or one-off (a trip). */
+export type Plan = {
+  id: number;
+  kind: 'expense' | 'income';
+  description: string;
+  amount_cents: number; // always positive; `kind` says the direction
+  category: string;
+  frequency: PlanFrequency;
+  start_date: string; // "YYYY-MM-DD": the (first) date it happens
+  end_date: string | null; // last possible date for recurring plans, or null
+};
+
+/** Monthly spending limit for a category */
+export type Budget = { category: string; limit_cents: number };

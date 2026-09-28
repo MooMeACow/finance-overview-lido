@@ -96,3 +96,20 @@ export function dayLabel(date: string): string {
 export function todayString(now = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
+
+/** "20 Dec 2026", or "20 Dec" with withYear = false */
+export function shortDate(date: string, withYear = true): string {
+  const [y, m, d] = date.slice(0, 10).split('-').map(Number);
+  return `${d} ${MONTHS[m - 1].slice(0, 3)}${withYear ? ` ${y}` : ''}`;
+}
+
+/** 1 → "1st", 22 → "22nd", 13 → "13th" */
+export function ordinal(n: number): string {
+  const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+  return `${n}${s}`;
+}
+
+/** True if the string is a real date in "YYYY-MM-DD" form */
+export function isValidDay(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && parseDate(s, 'YMD') !== null;
+}
