@@ -17,10 +17,10 @@ Built with React Native and Expo (SDK 57).
 - Net result, money in vs out, a 6-month chart (tap a month to open it), spending by category with budget progress, and your biggest expenses.
 
 **Transactions and import**
-- **CSV import**: Revolut statements are recognised automatically. For any other bank you match the columns once (date, description, amount, and optionally an in/out column like ING's "Af Bij"). Dutch and English number and date formats are supported.
+- **CSV import**: Revolut and ING statements (English or Dutch export) are recognised automatically. For any other bank you match the columns once (date, description, amount, and optionally an in/out column like ING's "Af Bij"). Dutch and English number and date formats are supported.
 - **No duplicates**: importing the same file twice only adds what's new. Two genuinely identical payments in one file are both kept.
 - **Categories that learn**: when you change a category, you can apply it to all transactions with the same description, and future imports remember it.
-- **Leave out of totals**: mark transfers between your own accounts so they aren't counted as income or spending.
+- **Own-account transfers aren't counted**: moving money between your own accounts isn't income or spending, so these are imported but left out of totals automatically: Revolut top-ups, Revolut Digital Assets, ING savings (Oranje Spaarrekening) transfers and round-ups, ING investment-account transfers, and ING top-ups to Revolut. You can switch this per transaction ("Leave out of totals").
 - **Manual entries** and **undo an import**.
 - **Responsive design**: on a computer you get a left sidebar, KPI cards, side-by-side panels, sortable tables, hover tooltips on charts and editing in a side panel; on a phone a compact layout with a bottom tab bar.
 - Blue theme with light and dark mode.
@@ -92,6 +92,10 @@ pnpm test
 ```
 
 `test/fixtures/revolut-sample.csv` is an anonymized sample statement.
+
+## How to export a CSV from ING
+
+In the ING app or on mijn.ing.nl: go to your current account, choose to download/export transactions, pick **CSV** (comma- or semicolon-separated both work) and a period. English and Dutch exports are both supported. (Menu names may differ between versions.)
 
 ## How to export a CSV from Revolut
 

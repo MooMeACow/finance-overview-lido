@@ -11,7 +11,7 @@ const store = new Map<string, string>();
 };
 
 import { toTable } from '../src/lib/csv.ts';
-import { parseRevolut } from '../src/lib/importers.ts';
+import { parseIng, parseRevolut } from '../src/lib/importers.ts';
 import * as db from '../src/db/database.web.ts';
 
 const csv = readFileSync(new URL('./fixtures/revolut-sample.csv', import.meta.url), 'utf8');
@@ -27,13 +27,14 @@ test('web storage: import, dedupe, totals', async () => {
   assert.equal(await db.countExisting(null, parsed().map((t) => t.hash)), 25);
   assert.equal((await db.getImports(null)).length, 1);
 
+  // Top-ups (€1,050) and Digital Assets transfers (€2.92) move money between own accounts: not counted
   const [aug, sep] = await db.getMonthTotals(null, '2026-09', 2);
-  assert.deepEqual(sep, { month: '2026-09', in_cents: 105000, out_cents: 65246 });
+  assert.deepEqual(sep, { month: '2026-09', in_cents: 0, out_cents: 65246 - 292 });
   assert.deepEqual(aug, { month: '2026-08', in_cents: 0, out_cents: 1000 });
 
   const cats = await db.getCategoryTotals(null, '2026-09');
   assert.equal(cats[0].category, 'transfers');
-  assert.equal(cats.reduce((s, c) => s + c.out_cents, 0), 65246);
+  assert.equal(cats.reduce((s, c) => s + c.out_cents, 0), 65246 - 292);
 
   assert.equal(await db.getLatestMonth(null), '2026-09');
   assert.equal(await db.getMainCurrency(null), 'EUR');
@@ -55,11 +56,12 @@ test('web storage: filters, edits, rules, excluded, delete', async () => {
   assert.equal((await db.getRules(null)).get('to tripper b.v.'), 'transport');
   assert.equal((await db.getTransactions(null, '2026-09', { category: 'transport' })).length, 2);
 
-  // Exclude a top-up from totals
+  // Top-ups start out not counted; count one of them again
   const topup = all.find((t) => t.amount_cents === 83000)!;
-  await db.updateTransaction(null, topup.id, { category: 'topup', note: 'from ING', excluded: true });
+  assert.equal(topup.excluded, 1);
+  await db.updateTransaction(null, topup.id, { category: 'topup', note: 'from ING', excluded: false });
   const [sep] = await db.getMonthTotals(null, '2026-09', 1);
-  assert.equal(sep.in_cents, 105000 - 83000);
+  assert.equal(sep.in_cents, 83000);
   assert.equal((await db.getTransactions(null, '2026-09', { search: 'from ing' })).length, 1);
 
   // Manual entry, then delete it
@@ -73,6 +75,17 @@ test('web storage: filters, edits, rules, excluded, delete', async () => {
   const [imp] = await db.getImports(null);
   await db.deleteImport(null, imp.id);
   assert.equal((await db.getTransactions(null, '2026-09')).length, 0);
+});
+
+test('web storage: ING and Revolut together', async () => {
+  const ing = parseIng(toTable(readFileSync(new URL('./fixtures/ing-sample.csv', import.meta.url), 'utf8'))).txns;
+  assert.equal(await db.importTransactions(null, 'ing.csv', 'ing', ing), 64);
+  assert.equal(await db.importTransactions(null, 'revolut.csv', 'revolut', parsed()), 25);
+  const [sep] = await db.getMonthTotals(null, '2026-09', 1);
+  // ING salary + allowances + refund in; ING spending + Revolut spending out; no own transfers
+  assert.equal(sep.in_cents, 280716 + 2 + 18600 + 11900);
+  assert.equal(sep.out_cents, 250300 + (65246 - 292));
+  assert.equal((await db.getImports(null)).length, 2);
 });
 
 test('web storage: survives a reload', async () => {

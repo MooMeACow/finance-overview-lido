@@ -1,0 +1,65 @@
+Date,Name / Description,Counterparty,Code,Debit/credit,Amount (EUR),Transaction type,Notifications
+20260923,Oranje Spaarrekening,,GT,Credit,"200,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 23/09/2026
+20260923,Oranje Spaarrekening,,GT,Debit,"1000,00",Online Banking,To Oranje spaarrekening X00000001 Value date: 23/09/2026
+20260923,ITRANSACT BV,NL80ABNA0834748819,OV,Credit,"2807,16",Transfer,Name: ITRANSACT BV Description: SALARISBETALING PERIODE 9 IBAN: NL80ABNA0834748819 Reference: 23-454995-01-10 Date/time: 23-09-2026 20:12:36 Value date: 23/09/2026
+20260923,BCK*AH to go Alkmaar 5 ALKMAAR,,BA,Debit,"1,50",Payment terminal,Card sequence no.: 900 22/09/2026 16:20 Transaction: W00633 Term: BS172127 Apple Pay Value date: 23/09/2026
+20260923,NOTPROVIDED,,OV,Debit,"2,33",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 23/09/2026
+20260922,Stichting  Pay.nl,NL35RABO0117713678,OV,Credit,"0,02",Transfer,Name: Stichting  Pay.nl Description: Pay.nl inzake ON THAT ASS INTERNATIONAL B.V. / Refund 3603738306Xdf5e7 / ON THAT ASS / RF-8077-7015-5650 IBAN: NL35RABO0117713678 Reference: D8UK-DCJ Value date: 22/09/2026
+20260922,ON THAT ASS INTERNATIONAL B.V.,NL48INGB0676087604,IW,Debit,"0,02",iDEAL | Wero,Name: ON THAT ASS INTERNATIONAL B.V. Description: 3603738306Xdf5e7 7370696806994661 NL528 ON THAT ASS membership. Le IBAN: NL48INGB0676087604 Reference: 22-09-2026 09:43 7370696806994661 Value date: 22/09/2026
+20260922,KLARNA BANK AB via Stichting Mollie Payments,NL51DEUT0265262461,IW,Debit,"17,63",iDEAL | Wero,Name: KLARNA BANK AB via Stichting Mollie Payments Description: e05a0ad7548813addbad2494c6ee2791 8152805010084442 Joybuy klarna.com KLARNA BANK AB IBAN: NL51DEUT0265262461 Reference: 22-09-2026 09:33 8152805010084442 Value date: 22/09/2026
+20260922,NOTPROVIDED,,OV,Debit,"2,11",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 22/09/2026
+20260921,Belastingdienst,NL04RABO0200112244,OV,Credit,"186,00",Transfer,Name: Belastingdienst Description: MAAND OKT. NR. 000000000T600012 VOORSCHOT HUURTOESLAG 2026 (HOLDER ) MEER INFO OP WWW.TOESLAGEN.NL IBAN: NL04RABO0200112244 Reference: COAXX037404833202609161001281925923 Value date: 21/09/2026
+20260921,Belastingdienst,NL04RABO0200112244,OV,Credit,"119,00",Transfer,Name: Belastingdienst Description: MAAND OKT. NR. 000000000T600013 VOORSCHOT ZORGTOESLAG 2026 (HOLDER ) MEER INFO OP WWW.TOESLAGEN.NL IBAN: NL04RABO0200112244 Reference: COAXX742660426202609161010470454905 Value date: 21/09/2026
+20260921,Amazing Oriental Almer Almere,,BA,Debit,"21,98",Payment terminal,Card sequence no.: 900 20/09/2026 14:51 Transaction: P00632 Term: 00000R6W Apple Pay Value date: 21/09/2026
+20260921,BP KRUISOORD NOORDBEEMSTER NLD,,BA,Debit,"0,50",Payment terminal,Card sequence no.: 900 20/09/2026 10:15 Transaction: C00671 Term: BS126549 Apple Pay Value date: 21/09/2026
+20260921,BCK*AH Oudorp Alkmaar NLD,,BA,Debit,"4,13",Payment terminal,Card sequence no.: 900 20/09/2026 09:45 Transaction: W00630 Term: CT935047 Apple Pay Value date: 21/09/2026
+20260921,TK Maxx Almere NLD,,BA,Debit,"14,28",Payment terminal,Card sequence no.: 900 20/09/2026 13:59 Transaction: W00631 Term: 05931515 Apple Pay Value date: 21/09/2026
+20260921,NOTPROVIDED,,OV,Debit,"1,36",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 21/09/2026
+20260920,BCK*Etos Oudorp ALKMAAR NLD,,BA,Debit,"20,32",Payment terminal,Card sequence no.: 900 19/09/2026 09:13 Transaction: P00628 Term: BS175803 Apple Pay Value date: 20/09/2026
+20260920,GELDMAAT OUDORPERPLEIN 27 NLD,,GM,Debit,"400,00",Cash machine,Card sequence no.: 001 19/09/2026 11:14 Transaction: W00629 Term: 921913 RRN: 626211947207 Value date: 20/09/2026
+20260920,Lidl 137 Alkmaar ALKMAAR NLD,,BA,Debit,"38,32",Payment terminal,Card sequence no.: 900 19/09/2026 15:38 Transaction: C00670 Term: 87105724 Apple Pay Value date: 20/09/2026
+20260919,Oranje Spaarrekening,,GT,Credit,"400,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 19/09/2026
+20260919,Oranje Spaarrekening,,GT,Credit,"200,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 19/09/2026
+20260919,Revolut**1234* Dublin IRL,,GT,Debit,"20,00",Online Banking,Card sequence no.: 900 18/09/2026 11:32 Transaction: P00627 Term: --- Apple Pay Value date: 19/09/2026
+20260918,KPN,NL09INGB0000667024,IW,Debit,"480,00",iDEAL | Wero,Name: KPN Description: 20260918105653 7051366200914447 Je bestelling S13283754 via kpn. IBAN: NL09INGB0000667024 Reference: 18-09-2026 12:57 7051366200914447 Value date: 18/09/2026
+20260918,Oranje Spaarrekening,,GT,Credit,"500,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 18/09/2026
+20260915,NOTPROVIDED,,OV,Debit,"0,45",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 15/09/2026
+20260914,BCK*AH Oudorp Alkmaar NLD,,BA,Debit,"9,55",Payment terminal,Card sequence no.: 900 13/09/2026 10:15 Transaction: W00625 Term: CT935047 Apple Pay Value date: 14/09/2026
+20260914,Revolut**1234* Dublin IRL,,GT,Debit,"100,00",Online Banking,Card sequence no.: 900 13/09/2026 11:33 Transaction: P00626 Term: --- Apple Pay Value date: 14/09/2026
+20260914,NOTPROVIDED,,OV,Debit,"0,40",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 14/09/2026
+20260913,CCV*PRENATAL ALKMAAR P ALKMAAR,,BA,Debit,"33,75",Payment terminal,Card sequence no.: 900 12/09/2026 12:00 Transaction: P00623 Term: CT653664 Apple Pay Value date: 13/09/2026
+20260913,Albert Heijn 2228 ALKMAAR NLD,,BA,Debit,"8,85",Payment terminal,Card sequence no.: 900 12/09/2026 12:07 Transaction: W00624 Term: BS159507 Apple Pay Value date: 13/09/2026
+20260913,NOTPROVIDED,,OV,Debit,"0,15",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 13/09/2026
+20260912,Oranje Spaarrekening,,GT,Credit,"100,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 12/09/2026
+20260912,BCK*AH to go Alkmaar 5 ALKMAAR,,BA,Debit,"8,85",Payment terminal,Card sequence no.: 900 11/09/2026 18:18 Transaction: D00669 Term: BS172124 Apple Pay Value date: 12/09/2026
+20260912,NOTPROVIDED,,OV,Debit,"0,50",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 12/09/2026
+20260911,Vue Cinemas B.V.,NL04ADYB2017400157,IW,Debit,"26,50",iDEAL | Wero,Name: Vue Cinemas B.V. Description: QS7PXSNM9H78CBZ35ZC8V 7180124695387157 e2f6bfae-4bd3-4888-bec7-08df0f12f2c IBAN: NL04ADYB2017400157 Reference: 11-09-2026 16:28 7180124695387157 Value date: 11/09/2026
+20260911,NOTPROVIDED,,OV,Debit,"0,59",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 11/09/2026
+20260911,Kosten ING Go,,DV,Debit,"4,00",Various,1 aug t/m 31 aug 2026 ING BANK N.V. Value date: 11/09/2026
+20260910,Albert Heijn 2228 ALKMAAR NLD,,BA,Debit,"30,41",Payment terminal,Card sequence no.: 900 09/09/2026 19:01 Transaction: W00622 Term: BS159506 Apple Pay Value date: 10/09/2026
+20260910,NOTPROVIDED,,OV,Debit,"0,28",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 10/09/2026
+20260909,Jumbo Alkmaar Paard ALKMAAR NLD,,BA,Debit,"14,72",Payment terminal,Card sequence no.: 900 08/09/2026 18:23 Transaction: C00668 Term: 124J0X Apple Pay Value date: 09/09/2026
+20260909,NETFLIX INTERNATIONAL B.V.,LU810670006550194759,IC,Debit,"9,99",SEPA direct debit,Name: NETFLIX INTERNATIONAL B.V. Description: Netflix Monthly Subscription IBAN: LU810670006550194759 Reference: 69071922987013804 Mandate ID: DD-55349088831415356-8229-251108 Creditor ID: GB96NFXSDDCHAS00000041302392 Recurrent SEPA direct debit Value date: 09/09/2026
+20260908,NOTPROVIDED,,OV,Debit,"0,10",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 08/09/2026
+20260907,J. Friend via Rabo Betaalverzoek,NL68RABO0140802673,IW,Debit,"10,00",iDEAL | Wero,Name: J. Friend via Rabo Betaalverzoek Description: NL00RABO0000000000 0022556207368488 J. Friend:Drankjes: J. Friend IBAN: NL68RABO0140802673 Reference: 07-09-2026 13:00 0022556207368488 Value date: 07/09/2026
+20260907,Revolut**1234* Dublin IRL,,GT,Debit,"40,00",Online Banking,Card sequence no.: 900 07/09/2026 05:21 Transaction: C00667 Term: --- Apple Pay Value date: 07/09/2026
+20260907,Oranje Spaarrekening,,GT,Credit,"0,09",Online Banking,From Oranje spaarrekening X00000002 Value date: 07/09/2026
+20260907,Oranje Spaarrekening,,GT,Credit,"100,00",Online Banking,From Oranje spaarrekening X00000002 Value date: 07/09/2026
+20260907,Jumbo Alkmaar Paard ALKMAAR NLD,,BA,Debit,"41,90",Payment terminal,Card sequence no.: 900 06/09/2026 16:17 Transaction: C00666 Term: 127XB4 Apple Pay Value date: 07/09/2026
+20260907,Klarna Bank AB,SE8797800000097817083608,IC,Debit,"17,63",SEPA direct debit,Name: Klarna Bank AB Description: Purchase at Joybuy IBAN: SE8797800000097817083608 Reference: 01a06c0618b07e96bbd8f04539295083 Mandate ID: b310b9f354db44ffb81abae0f7352fd8 Creditor ID: SE71ZZZ5567370431 Recurrent SEPA direct debit Value date: 07/09/2026
+20260907,NOTPROVIDED,,OV,Debit,"0,36",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 07/09/2026
+20260907,NS GROEP IZ NS REIZIGERS,NL14ABNA0576850675,IC,Debit,"402,43",SEPA direct debit,Name: NS GROEP IZ NS REIZIGERS Description: Factuur: 452004438670 IBAN: NL14ABNA0576850675 Reference: 250032629630 Mandate ID: 200002601192 Creditor ID: NL03ZZZ301243580000 Recurrent SEPA direct debit Value date: 07/09/2026
+20260906,Etos 7913 DRONTEN NLD,,BA,Debit,"11,64",Payment terminal,Card sequence no.: 900 05/09/2026 16:41 Transaction: W00621 Term: CT982458 Apple Pay Value date: 06/09/2026
+20260905,Oranje Spaarrekening,,GT,Credit,"200,00",Online Banking,From Oranje spaarrekening X00000001 Value date: 05/09/2026
+20260905,Amazing Oriental Almer Almere,,BA,Debit,"20,00",Payment terminal,Card sequence no.: 900 04/09/2026 18:26 Transaction: W00620 Term: 00000R6Y Apple Pay Value date: 05/09/2026
+20260905,NOTPROVIDED,,OV,Debit,"0,55",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 05/09/2026
+20260904,Revolut**1234* Dublin IRL,,GT,Debit,"30,00",Online Banking,Card sequence no.: 900 04/09/2026 10:44 Transaction: D00665 Term: --- Apple Pay Value date: 04/09/2026
+20260904,LS Broodjes Boetiek Ni NLD,,BA,Debit,"5,45",Payment terminal,Card sequence no.: 900 04/09/2026 07:50 Transaction: C00664 Term: 40539618 Apple Pay Value date: 04/09/2026
+20260903,CCV*Maatschap Chiropra OUDORP NH,,BA,Debit,"68,00",Payment terminal,Card sequence no.: 900 02/09/2026 18:34 Transaction: C00662 Term: CT392109 Apple Pay Value date: 03/09/2026
+20260903,Revolut**1234* Dublin IRL,,GT,Debit,"30,00",Online Banking,Card sequence no.: 900 02/09/2026 18:28 Transaction: C00663 Term: --- Apple Pay Value date: 03/09/2026
+20260902,NOTPROVIDED,,OV,Debit,"0,10",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 02/09/2026
+20260901,A. Holder,00000003,OV,Debit,"100,00",Transfer,To Beleggingsrek. 00000003 Value date: 01/09/2026
+20260901,CCV*Heerlijk waar B.V NAARDEN,,BA,Debit,"6,90",Payment terminal,Card sequence no.: 900 31/08/2026 08:27 Transaction: P00618 Term: CT422009 Apple Pay Value date: 01/09/2026
+20260901,Revolut**1234* Dublin IRL,,GT,Debit,"140,00",Online Banking,Card sequence no.: 900 31/08/2026 12:20 Transaction: P00619 Term: --- Apple Pay Value date: 01/09/2026
+20260901,NOTPROVIDED,,OV,Debit,"1,10",Transfer,To Oranje spaarrekening X00000001 Afronding Value date: 01/09/2026
+20260901,Pinedo Makelaardij B.V. inz. derdengelden,NL15RABO0343538768,IC,Debit,"773,75",SEPA direct debit,Name: Pinedo Makelaardij B.V. inz. derdengelden Description: Example street 1 IBAN: NL15RABO0343538768 Reference: EI 2026-08-27 13:25:07/0000000015 Mandate ID: Example street 1 Creditor ID: NL87ZZZ896508590000 Recurrent SEPA direct debit Value date: 01/09/2026

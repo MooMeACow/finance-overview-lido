@@ -17,6 +17,8 @@ export type ParsedTxn = {
   currency: string;
   category: string;
   hash: string; // stable id used to skip duplicates on re-import
+  /** Money moved between your own accounts: stored but left out of totals */
+  excluded?: boolean;
 };
 
 export type ParseResult = {
@@ -110,6 +112,8 @@ export function parseRevolut(table: Table, rules?: Rules): ParseResult {
     }
     const description = (r[c.description] ?? '').trim() || '(no description)';
     const kind = (r[c.type] ?? '').trim();
+    // Top-ups come from your own bank account; Digital Assets is your own savings/crypto
+    const ownTransfer = kind.toLowerCase() === 'topup' || /revolut digital assets/i.test(description);
     txns.push({
       date,
       description,
@@ -117,6 +121,105 @@ export function parseRevolut(table: Table, rules?: Rules): ParseResult {
       currency: (r[c.currency] ?? 'EUR').trim() || 'EUR',
       category: categorize(description, total, kind, rules),
       hash: hash([r[c.started], description, amount, fee, r[c.product] ?? '']),
+      excluded: ownTransfer,
+    });
+  }
+  return finish(txns, skipped);
+}
+
+// ---------- ING ----------
+
+/** ING exports come in English or Dutch; these are the column names for each. */
+const ING_COLUMNS = {
+  en: { date: 'Date', name: 'Name / Description', direction: 'Debit/credit', amount: 'Amount (EUR)', type: 'Transaction type', notes: 'Notifications', out: 'debit' },
+  nl: { date: 'Datum', name: 'Naam / Omschrijving', direction: 'Af Bij', amount: 'Bedrag (EUR)', type: 'Mutatiesoort', notes: 'Mededelingen', out: 'af' },
+};
+
+function ingLanguage(headers: string[]): keyof typeof ING_COLUMNS | null {
+  for (const lang of ['en', 'nl'] as const) {
+    const cols = ING_COLUMNS[lang];
+    if ([cols.date, cols.name, cols.direction, cols.amount].every((h) => headers.includes(h))) return lang;
+  }
+  return null;
+}
+
+export function isIng(headers: string[]): boolean {
+  return ingLanguage(headers) !== null;
+}
+
+/** Makes ING's card-payment names readable: "BCK*AH Oudorp Alkmaar NLD" → "AH Oudorp Alkmaar". */
+export function cleanIngName(name: string, notes: string): string {
+  let n = name.replace(/\s+/g, ' ').trim();
+  if (!n || n.toUpperCase() === 'NOTPROVIDED') {
+    if (/afronding/i.test(notes)) return 'Round-up to savings';
+    const first = notes.split(/\s(?:Value date|Valutadatum):/i)[0].trim();
+    return first.slice(0, 60) || '(no description)';
+  }
+  if (/^revolut\*/i.test(n)) return 'Top-up to Revolut';
+  if (/beleggingsrek/i.test(notes)) return 'To investment account';
+  n = n.replace(/^(BCK|CCV|SumUp|ZTL|SEPAY)\s*\*\s*/i, '');
+  n = n.replace(/\s(NLD|NL|BEL|DEU|IRL|FRA|ESP|LUX)$/i, '');
+  return n.trim();
+}
+
+export function parseIng(table: Table, rules?: Rules): ParseResult {
+  const cols = ING_COLUMNS[ingLanguage(table.headers) ?? 'en'];
+  const col = (name: string) => table.headers.indexOf(name);
+  const c = {
+    date: col(cols.date),
+    name: col(cols.name),
+    direction: col(cols.direction),
+    amount: col(cols.amount),
+    type: col(cols.type),
+    notes: col(cols.notes),
+  };
+  const hash = makeHasher('ing');
+  const txns: ParsedTxn[] = [];
+  const skipped = new Map<string, number>();
+
+  for (const r of table.rows) {
+    const date = parseDate(r[c.date] ?? '', 'YMD');
+    const abs = parseAmount(r[c.amount] ?? '');
+    if (!date || abs === null) {
+      addSkip(skipped, 'Could not read date or amount');
+      continue;
+    }
+    if (abs === 0) {
+      addSkip(skipped, 'Zero amount');
+      continue;
+    }
+    const out = (r[c.direction] ?? '').trim().toLowerCase() === cols.out;
+    const amount = out ? -Math.abs(abs) : Math.abs(abs);
+    const rawName = (r[c.name] ?? '').trim();
+    const notes = c.notes >= 0 ? (r[c.notes] ?? '').trim() : '';
+    const type = c.type >= 0 ? (r[c.type] ?? '').trim().toLowerCase() : '';
+    const description = cleanIngName(rawName, notes);
+
+    // Money moved between your own accounts: savings, round-ups, investments, top-ups to Revolut
+    const text = `${rawName} ${notes}`.toLowerCase();
+    const toSavings = /spaarrekening|beleggingsrek|afronding/.test(text);
+    const toRevolut = /^revolut\*/i.test(rawName);
+    const ownTransfer = toSavings || toRevolut;
+
+    const kind = type === 'cash machine' || type === 'geldautomaat' ? 'cash' : type === 'transfer' || type === 'overschrijving' ? 'transfer' : '';
+    // A category you picked yourself for this description always wins
+    const learned = rules?.has(description.trim().toLowerCase());
+    const category = learned
+      ? categorize(description, amount, kind, rules)
+      : toSavings
+        ? 'savings'
+        : toRevolut
+          ? 'transfers'
+          : categorize(description, amount, kind, rules);
+
+    txns.push({
+      date,
+      description,
+      amountCents: amount,
+      currency: 'EUR',
+      category,
+      hash: hash([r[c.date], rawName, r[c.direction], r[c.amount], notes]),
+      excluded: ownTransfer,
     });
   }
   return finish(txns, skipped);

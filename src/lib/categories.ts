@@ -15,6 +15,9 @@ export type CategoryKey =
   | 'transport'
   | 'shopping'
   | 'subscriptions'
+  | 'entertainment'
+  | 'health'
+  | 'cash'
   | 'bills'
   | 'housing'
   | 'fees'
@@ -32,9 +35,12 @@ export const CATEGORIES: Category[] = [
   { key: 'transport', label: 'Transport', icon: 'bus-outline' },
   { key: 'shopping', label: 'Shopping', icon: 'bag-handle-outline' },
   { key: 'subscriptions', label: 'Subscriptions', icon: 'repeat-outline' },
+  { key: 'entertainment', label: 'Going out & fun', icon: 'film-outline' },
+  { key: 'health', label: 'Health & care', icon: 'medkit-outline' },
   { key: 'bills', label: 'Bills & utilities', icon: 'flash-outline' },
   { key: 'housing', label: 'Housing', icon: 'home-outline' },
   { key: 'fees', label: 'Fees', icon: 'receipt-outline' },
+  { key: 'cash', label: 'Cash withdrawals', icon: 'cash-outline' },
   { key: 'other', label: 'Other', icon: 'ellipsis-horizontal-circle-outline' },
 ];
 
@@ -45,14 +51,18 @@ export function getCategory(key: string): Category {
 }
 
 const KEYWORDS: [CategoryKey, string[]][] = [
-  ['savings', ['revolut digital assets', 'savings', 'vault', 'spaarrekening']],
-  ['groceries', ['albert heijn', 'jumbo', 'lidl', 'aldi', 'dirk van den broek', 'ekoplaza']],
-  ['eating_out', ['thuisbezorgd', 'uber eats', 'deliveroo', 'restaurant', 'cafe', 'café', 'mcdonald', 'starbucks']],
+  ['savings', ['revolut digital assets', 'savings', 'vault', 'spaarrekening', 'beleggingsrek', 'round-up to savings']],
+  ['cash', ['geldmaat', 'cash withdrawal']],
+  ['groceries', ['albert heijn', ' ah ', 'jumbo', 'lidl', 'aldi', 'dirk van den broek', 'ekoplaza', 'plus supermarkt', 'amazing oriental']],
+  ['eating_out', ['thuisbezorgd', 'uber eats', 'deliveroo', 'restaurant', 'cafe', 'café', 'mcdonald', 'starbucks', 'broodje']],
+  ['entertainment', ['vue cinemas', 'pathe', 'pathé', 'cinema', 'bioscoop', 'ticketmaster']],
+  ['health', ['chiropra', 'apotheek', 'pharmacy', 'huisarts', 'tandarts', 'fysio']],
+  ['shopping', ['etos', 'kruidvat', 'tk maxx', 'prenatal', 'hema', ' action ', 'bol.com', 'zalando', 'primark']],
   ['transport', ['ns groep', 'ov-chipkaart', 'uber', 'bolt', 'shell', ' bp ', 'esso', 'parkeren', 'parking']],
   ['subscriptions', ['netflix', 'spotify', 'anthropic', 'openai', 'disney', 'youtube', 'icloud', 'apple.com', 'apple']],
   ['bills', ['vattenfall', 'eneco', 'essent', 'ziggo', 'kpn', 'odido', 'vodafone', 'waternet', 'verzekering', 'insurance']],
-  ['housing', [' huur', ' rent ', 'hypotheek', 'mortgage']],
-  ['fees', ['plan fee', 'service fee', 'bank fee', 'kosten betaal']],
+  ['housing', [' huur', ' rent ', 'hypotheek', 'mortgage', 'makelaardij']],
+  ['fees', ['plan fee', 'service fee', 'bank fee', 'kosten betaal', 'kosten ing']],
   ['income', ['salary', 'salaris', ' loon', 'payroll']],
 ];
 
@@ -75,6 +85,7 @@ export function categorize(
   const k = (kind ?? '').toLowerCase();
   if (k === 'topup') return 'topup';
   if (k === 'charge' || k === 'fee') return 'fees';
+  if (k === 'cash') return 'cash';
 
   const padded = ` ${desc} `;
   for (const [cat, words] of KEYWORDS) {

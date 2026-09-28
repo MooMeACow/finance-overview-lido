@@ -16,8 +16,10 @@ import { getCategory } from '../lib/categories';
 import {
   type Mapping,
   type ParseResult,
+  isIng,
   isRevolut,
   parseGeneric,
+  parseIng,
   parseRevolut,
   suggestMapping,
 } from '../lib/importers';
@@ -31,7 +33,9 @@ import {
   importTransactions,
 } from '../db/database';
 
-type Loaded = { fileName: string; table: Table; source: 'revolut' | 'csv' };
+type Loaded = { fileName: string; table: Table; source: 'revolut' | 'ing' | 'csv' };
+
+const SOURCE_LABEL = { revolut: 'Revolut statement', ing: 'ING statement', csv: 'Bank CSV' };
 
 export function ImportScreen({ onDone }: { onDone: () => void }) {
   const db = useDb();
@@ -53,6 +57,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const result: ParseResult | null = useMemo(() => {
     if (!loaded) return null;
     if (loaded.source === 'revolut') return parseRevolut(loaded.table, rules);
+    if (loaded.source === 'ing') return parseIng(loaded.table, rules);
     return mapping ? parseGeneric(loaded.table, mapping, rules) : null;
   }, [loaded, mapping, rules]);
 
@@ -78,10 +83,10 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
         notify('Could not read this file', 'Make sure it is a CSV export with a header row.');
         return;
       }
-      const revolut = isRevolut(table.headers);
+      const source = isRevolut(table.headers) ? 'revolut' : isIng(table.headers) ? 'ing' : 'csv';
       setRules(await getRules(db));
-      setMapping(revolut ? null : suggestMapping(table));
-      setLoaded({ fileName: asset.name ?? 'statement.csv', table, source: revolut ? 'revolut' : 'csv' });
+      setMapping(source === 'csv' ? suggestMapping(table) : null);
+      setLoaded({ fileName: asset.name ?? 'statement.csv', table, source });
     } catch (e) {
       notify('Could not open file', String(e instanceof Error ? e.message : e));
     } finally {
@@ -140,8 +145,10 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
 
   const newCount = result ? result.txns.length - existing : 0;
   const totals = useMemo(() => {
-    const txns = result?.txns ?? [];
+    const all = result?.txns ?? [];
+    const txns = all.filter((t) => !t.excluded);
     return {
+      ownTransfers: all.length - txns.length,
       in: txns.filter((t) => t.amountCents > 0).reduce((s, t) => s + t.amountCents, 0),
       out: txns.filter((t) => t.amountCents < 0).reduce((s, t) => s - t.amountCents, 0),
       currency: txns[0]?.currency ?? 'EUR',
@@ -158,7 +165,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
           <Text style={[styles.lead, { color: c.text }]}>Add a bank statement</Text>
           <Text style={[styles.body, { color: c.textSecondary }]}>
             Export your transactions as a CSV file from your bank's app or website, then choose it here. Revolut
-            statements are recognised automatically; for other banks you can tell the app which column is which.
+            and ING statements are recognised automatically; for other banks you can tell the app which column is which.
             Importing the same file twice won't create duplicates.
           </Text>
           <Button label={busy ? 'Opening…' : 'Choose CSV file'} icon="document-attach-outline" onPress={pickFile} disabled={busy} />
@@ -170,7 +177,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.lead, { color: c.text }]} numberOfLines={1}>{loaded.fileName}</Text>
                 <Text style={[styles.body, { color: c.textSecondary }]}>
-                  {loaded.source === 'revolut' ? 'Revolut statement' : 'Bank CSV'} · {loaded.table.rows.length} rows
+                  {SOURCE_LABEL[loaded.source]} · {loaded.table.rows.length} rows
                 </Text>
               </View>
               <IconButton icon="close" label="Cancel import" onPress={reset} />
@@ -198,6 +205,13 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
                 <Text style={[styles.small, { color: c.textSecondary }]}>
                   In this file: {formatMoney(totals.in, totals.currency)} in · {formatMoney(totals.out, totals.currency)} out
                 </Text>
+                {totals.ownTransfers > 0 ? (
+                  <Text style={[styles.small, { color: c.textSecondary }]}>
+                    {totals.ownTransfers} transfer{totals.ownTransfers === 1 ? '' : 's'} between your own accounts (savings,
+                    round-ups, top-ups) {totals.ownTransfers === 1 ? "isn't" : "aren't"} counted as income or spending. You
+                    can change this per transaction.
+                  </Text>
+                ) : null}
                 <View style={[styles.hr, { backgroundColor: c.hairline }]} />
                 {result.txns.slice(0, 8).map((t) => (
                   <View key={t.hash} style={styles.previewRow}>
@@ -205,9 +219,15 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
                       <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={1}>{t.description}</Text>
                       <Text style={{ color: c.textMuted, fontSize: 12 }}>
                         {dayLabel(t.date)} · {getCategory(t.category).label}
+                        {t.excluded ? ' · not counted' : ''}
                       </Text>
                     </View>
-                    <Text style={{ color: t.amountCents > 0 ? c.positive : c.text, fontVariant: ['tabular-nums'], fontWeight: '600' }}>
+                    <Text
+                      style={[
+                        { color: t.amountCents > 0 ? c.positive : c.text, fontVariant: ['tabular-nums'], fontWeight: '600' },
+                        t.excluded && { opacity: 0.45, textDecorationLine: 'line-through' },
+                      ]}
+                    >
                       {formatMoney(t.amountCents, t.currency, 'always')}
                     </Text>
                   </View>

@@ -195,9 +195,9 @@ export async function importTransactions(
     const importId = imp.lastInsertRowId;
     for (const t of txns) {
       const res = await db.runAsync(
-        `INSERT OR IGNORE INTO transactions (date, description, amount_cents, currency, category, source, import_id, hash)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [t.date, t.description, t.amountCents, t.currency, t.category, source, importId, t.hash],
+        `INSERT OR IGNORE INTO transactions (date, description, amount_cents, currency, category, excluded, source, import_id, hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [t.date, t.description, t.amountCents, t.currency, t.category, t.excluded ? 1 : 0, source, importId, t.hash],
       );
       added += res.changes;
     }

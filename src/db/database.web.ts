@@ -184,7 +184,7 @@ export async function importTransactions(_db: Db, fileName: string, source: stri
       currency: t.currency,
       category: t.category,
       note: null,
-      excluded: 0,
+      excluded: t.excluded ? 1 : 0,
       source,
       import_id: importId,
       hash: t.hash,
