@@ -419,10 +419,10 @@ function MobileHero({
   currency,
   onEdit,
 }: {
-  accounts: Account[];
+  accounts: LiveAccount[];
   total: number;
   currency: string;
-  onEdit: (a: Account | null) => void;
+  onEdit: (a: LiveAccount | null) => void;
 }) {
   const c = useColors();
   return (
