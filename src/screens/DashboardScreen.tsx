@@ -71,8 +71,12 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
 
   const spentMap = useMemo(() => new Map(spent.map((s) => [s.category, s.out_cents])), [spent]);
   const total = accounts.reduce((s, a) => s + a.balance_cents, 0);
+  const currentAccounts = accounts.filter((a) => a.type !== 'savings');
   const savingsAccounts = accounts.filter((a) => a.type === 'savings');
+  const current = currentAccounts.reduce((s, a) => s + a.balance_cents, 0);
   const savings = savingsAccounts.reduce((s, a) => s + a.balance_cents, 0);
+  const share = (part: number) => (total > 0 ? `${Math.round((part / total) * 100)}% of your money` : '');
+  const countLabel = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
   const forecast = useMemo(
     () => buildForecast({ startBalanceCents: total, plans, budgets, spentThisMonth: spentMap, today, months: 6 }),
     [total, plans, budgets, spentMap, today],
@@ -144,23 +148,34 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
           Add each account (bank, savings, cash) with its current balance to see your total.
         </Text>
       ) : (
-        <View>
-          {accounts.map((a, i) => (
-            <HoverRow key={a.id} onPress={() => setAccountSheet({ open: true, account: a })} first={i === 0}>
-              <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
-                <Ionicons name={a.type === 'savings' ? 'trending-up-outline' : 'wallet-outline'} size={16} color={c.primary} />
+        <View style={{ gap: space.md }}>
+          {[
+            { title: 'Current', list: currentAccounts, sum: current, icon: 'wallet-outline' as IconName },
+            { title: 'Savings & investments', list: savingsAccounts, sum: savings, icon: 'trending-up-outline' as IconName },
+          ]
+            .filter((g) => g.list.length > 0)
+            .map((g) => (
+              <View key={g.title}>
+                <View style={styles.between}>
+                  <Text style={[styles.groupTitle, { color: c.textMuted }]}>{g.title}</Text>
+                  <Text style={[styles.amount, { color: c.textSecondary, fontSize: 13 }]}>{formatMoney(g.sum, currency)}</Text>
+                </View>
+                {g.list.map((a, i) => (
+                  <HoverRow key={a.id} onPress={() => setAccountSheet({ open: true, account: a })} first={i === 0}>
+                    <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
+                      <Ionicons name={g.icon} size={16} color={c.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{a.name}</Text>
+                      <Text style={[styles.rowSub, { color: c.textMuted }]}>Updated {a.updated_at.slice(0, 10)}</Text>
+                    </View>
+                    <Text style={[styles.amount, { color: c.text }]}>{formatMoney(a.balance_cents, a.currency)}</Text>
+                  </HoverRow>
+                ))}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{a.name}</Text>
-                <Text style={[styles.rowSub, { color: c.textMuted }]}>
-                  {a.type === 'savings' ? 'Savings' : 'Everyday'} · updated {a.updated_at.slice(0, 10)}
-                </Text>
-              </View>
-              <Text style={[styles.amount, { color: c.text }]}>{formatMoney(a.balance_cents, a.currency)}</Text>
-            </HoverRow>
-          ))}
+            ))}
           <View style={[styles.totalRow, { borderTopColor: c.hairline }]}>
-            <Text style={{ color: c.textSecondary, fontWeight: '600' }}>Total</Text>
+            <Text style={{ color: c.text, fontWeight: '700' }}>Overall total</Text>
             <Text style={[styles.amount, { color: c.text, fontWeight: '700' }]}>{formatMoney(total, currency)}</Text>
           </View>
         </View>
@@ -323,25 +338,19 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
       )}
       <KpiRow>
         {isWide ? (
-          <KpiCard
-            tone="hero"
-            icon="wallet-outline"
-            label="Total money"
-            value={formatMoney(total, currency)}
-            hint={`${accounts.length} account${accounts.length === 1 ? '' : 's'}`}
-          />
+          <KpiCard tone="hero" icon="wallet-outline" label="Overall total" value={formatMoney(total, currency)} hint={countLabel(accounts.length)} />
         ) : null}
         <KpiCard
+          icon="card-outline"
+          label="Total current"
+          value={formatMoney(current, currency)}
+          hint={currentAccounts.length === 0 ? 'No current accounts yet' : share(current) || countLabel(currentAccounts.length)}
+        />
+        <KpiCard
           icon="trending-up-outline"
-          label="Savings"
+          label="Total savings"
           value={formatMoney(savings, currency)}
-          hint={
-            savingsAccounts.length === 0
-              ? 'Mark an account as savings'
-              : total > 0
-                ? `${Math.round((savings / total) * 100)}% of your money`
-                : `${savingsAccounts.length} account${savingsAccounts.length === 1 ? '' : 's'}`
-          }
+          hint={savingsAccounts.length === 0 ? 'Mark an account as savings' : share(savings) || countLabel(savingsAccounts.length)}
         />
         <KpiCard
           icon="calendar-outline"
@@ -579,6 +588,7 @@ function PlanGroup({
 }
 
 const styles = StyleSheet.create({
+  groupTitle: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
   body: { fontSize: 15, lineHeight: 21 },
   hero: { borderRadius: radius.lg, padding: space.xl, gap: 4 },
   heroLabel: { fontSize: 14, fontWeight: '500' },

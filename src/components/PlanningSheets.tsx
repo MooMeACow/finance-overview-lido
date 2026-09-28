@@ -73,7 +73,7 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
       <View>
         <FieldLabel>Type</FieldLabel>
         <View style={styles.chips}>
-          <Chip label="Everyday" icon="card-outline" selected={type === 'current'} onPress={() => setType('current')} />
+          <Chip label="Current" icon="card-outline" selected={type === 'current'} onPress={() => setType('current')} />
           <Chip label="Savings & investments" icon="trending-up-outline" selected={type === 'savings'} onPress={() => setType('savings')} />
         </View>
       </View>

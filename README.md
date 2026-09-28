@@ -7,7 +7,7 @@ Built with React Native and Expo (SDK 57).
 ## Features
 
 **Dashboard**
-- **Three key numbers**: total money across your accounts, how much of it is savings, and your expected balance in 6 months. You type in each account's balance (and whether it's an everyday or a savings/investment account) and update it whenever you like.
+- **Key numbers**: overall total, total in current accounts, total in savings & investments, and your expected balance in 6 months. You type in each account's balance and type (current, or savings & investments) and update it whenever you like. The accounts list is grouped by type with subtotals.
 - **Expected balance for the next 6 months**, based on your accounts, planned income and expenses, and budgets. Tap a month to see how it adds up; you're warned if it's expected to drop below zero.
 - **Coming up**: everything planned in the next 30 days.
 - **Plans**: recurring (monthly or yearly) and one-off expenses and income, e.g. rent, salary, a trip.
