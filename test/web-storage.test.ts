@@ -133,3 +133,22 @@ test('web storage: data saved by the previous version still loads', async () => 
   await fresh.saveAccount(null, { name: 'Cash', balanceCents: 2000, currency: 'EUR' });
   assert.equal((await fresh.getAccounts(null))[0].id, 1);
 });
+
+test('web storage: imported statements list with period, counts, delete', async () => {
+  const ing = parseIng(toTable(readFileSync(new URL('./fixtures/ing-sample.csv', import.meta.url), 'utf8'))).txns;
+  await db.importTransactions(null, 'ing.csv', 'ing', ing);
+  await db.importTransactions(null, 'revolut.csv', 'revolut', parsed());
+  const list = await db.getImports(null);
+  assert.deepEqual(
+    list.map((i) => [i.file_name, i.source, i.txn_count, i.first_date?.slice(0, 10), i.last_date?.slice(0, 10)]),
+    [
+      ['revolut.csv', 'revolut', 25, '2026-08-30', '2026-09-24'],
+      ['ing.csv', 'ing', 64, '2026-09-01', '2026-09-23'],
+    ],
+  );
+  assert.equal(list[0].counted_in_cents, 0);
+  await db.deleteImport(null, list[0].id);
+  const after = await db.getImports(null);
+  assert.deepEqual(after.map((i) => i.file_name), ['ing.csv']);
+  assert.equal((await db.getTransactions(null, '2026-09', { search: 'tripper' })).length, 0);
+});

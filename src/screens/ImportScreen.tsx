@@ -10,7 +10,7 @@ import { useLayout } from '../layout';
 import { space, useColors } from '../theme';
 import { useAppState } from '../state';
 import { type Table, toTable } from '../lib/csv';
-import { DATE_FORMATS, dayLabel } from '../lib/dates';
+import { DATE_FORMATS, dayLabel, shortDate } from '../lib/dates';
 import { formatMoney } from '../lib/money';
 import { getCategory } from '../lib/categories';
 import {
@@ -24,7 +24,7 @@ import {
   suggestMapping,
 } from '../lib/importers';
 import {
-  type ImportRecord,
+  type ImportSummary,
   countExisting,
   deleteAllData,
   deleteImport,
@@ -48,7 +48,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const [rules, setRules] = useState<Map<string, string>>(new Map());
   const [existing, setExisting] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [imports, setImports] = useState<ImportRecord[]>([]);
+  const [imports, setImports] = useState<ImportSummary[]>([]);
 
   useEffect(() => {
     getImports(db).then(setImports);
@@ -121,10 +121,10 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
     }
   };
 
-  const removeImport = async (imp: ImportRecord) => {
+  const removeImport = async (imp: ImportSummary) => {
     const ok = await confirmAction(
       'Remove this import?',
-      `Deletes the ${imp.row_count} transactions added from ${imp.file_name}.`,
+      `Deletes the ${imp.txn_count} transactions that came from ${imp.file_name}. You can import the file again afterwards.`,
       'Remove',
     );
     if (!ok) return;
@@ -250,22 +250,10 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {imports.length > 0 && !loaded ? (
+      {!loaded ? (
         <>
-          <SectionTitle>Recent imports</SectionTitle>
-          <Card style={{ paddingVertical: space.xs }}>
-            {imports.map((imp, i) => (
-              <View key={imp.id} style={[styles.importRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.hairline }]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: c.text, fontSize: 15 }} numberOfLines={1}>{imp.file_name}</Text>
-                  <Text style={{ color: c.textMuted, fontSize: 13 }}>
-                    {imp.row_count} transactions · {imp.imported_at.slice(0, 16)}
-                  </Text>
-                </View>
-                <IconButton icon="trash-outline" label={`Remove import ${imp.file_name}`} onPress={() => removeImport(imp)} color={c.textSecondary} />
-              </View>
-            ))}
-          </Card>
+          <SectionTitle>Imported statements</SectionTitle>
+          <ImportedStatements imports={imports} onDelete={removeImport} />
         </>
       ) : null}
 
@@ -286,6 +274,82 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
     </Page>
   );
 }
+
+const SOURCE_SHORT: Record<string, string> = { revolut: 'Revolut', ing: 'ING', csv: 'CSV', manual: 'Manual' };
+
+function period(imp: ImportSummary): string {
+  if (!imp.first_date || !imp.last_date) return '—';
+  const a = shortDate(imp.first_date);
+  const b = shortDate(imp.last_date);
+  return a === b ? a : `${a} – ${b}`;
+}
+
+/** All imported statements with their period and totals; delete removes their transactions. */
+function ImportedStatements({ imports, onDelete }: { imports: ImportSummary[]; onDelete: (imp: ImportSummary) => void }) {
+  const c = useColors();
+  const { isMedium } = useLayout();
+
+  if (imports.length === 0) {
+    return (
+      <Card>
+        <Text style={[styles.body, { color: c.textSecondary }]}>No statements imported yet.</Text>
+      </Card>
+    );
+  }
+
+  const badge = (source: string) => (
+    <View style={[styles.badge, { backgroundColor: c.accentSoft }]}>
+      <Text style={{ color: c.primary, fontSize: 12, fontWeight: '700' }}>{SOURCE_SHORT[source] ?? source}</Text>
+    </View>
+  );
+
+  return (
+    <Card style={{ paddingHorizontal: 0, paddingVertical: space.xs }}>
+      {isMedium ? (
+        <View style={[styles.tr, { borderBottomColor: c.hairline, paddingVertical: space.sm }]}>
+          {['Bank', 'File', 'Period', 'Transactions', 'Counted in / out', 'Imported', ''].map((h, i) => (
+            <Text key={i} style={[styles.th, { color: c.textMuted, flex: IMPORT_COLS[i] }, i >= 3 && i <= 4 && { textAlign: 'right' }]}>
+              {h}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+      {imports.map((imp, i) =>
+        isMedium ? (
+          <View key={imp.id} style={[styles.tr, { borderBottomColor: c.hairline }, i === imports.length - 1 && { borderBottomWidth: 0 }]}>
+            <View style={{ flex: IMPORT_COLS[0] }}>{badge(imp.source)}</View>
+            <Text style={[styles.td, { color: c.text, flex: IMPORT_COLS[1], fontWeight: '500' }]} numberOfLines={1}>{imp.file_name}</Text>
+            <Text style={[styles.td, { color: c.textSecondary, flex: IMPORT_COLS[2] }]} numberOfLines={1}>{period(imp)}</Text>
+            <Text style={[styles.td, styles.num, { color: c.text, flex: IMPORT_COLS[3] }]}>{imp.txn_count}</Text>
+            <Text style={[styles.td, styles.num, { color: c.textSecondary, flex: IMPORT_COLS[4] }]} numberOfLines={1}>
+              {formatMoney(imp.counted_in_cents)} / {formatMoney(imp.counted_out_cents)}
+            </Text>
+            <Text style={[styles.td, { color: c.textMuted, flex: IMPORT_COLS[5] }]} numberOfLines={1}>{imp.imported_at.slice(0, 16)}</Text>
+            <View style={{ flex: IMPORT_COLS[6], alignItems: 'flex-end' }}>
+              <IconButton icon="trash-outline" label={`Delete import ${imp.file_name}`} onPress={() => onDelete(imp)} color={c.danger} />
+            </View>
+          </View>
+        ) : (
+          <View key={imp.id} style={[styles.importRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.hairline }]}>
+            {badge(imp.source)}
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: c.text, fontSize: 15 }} numberOfLines={1}>{imp.file_name}</Text>
+              <Text style={{ color: c.textMuted, fontSize: 13 }} numberOfLines={1}>
+                {period(imp)} · {imp.txn_count} transactions
+              </Text>
+            </View>
+            <IconButton icon="trash-outline" label={`Delete import ${imp.file_name}`} onPress={() => onDelete(imp)} color={c.danger} />
+          </View>
+        ),
+      )}
+      <Text style={[styles.small, { color: c.textMuted, paddingHorizontal: space.lg, paddingVertical: space.md }]}>
+        Imported something twice, or before own-account transfers were recognised? Delete it here and import the file again.
+      </Text>
+    </Card>
+  );
+}
+
+const IMPORT_COLS = [0.8, 2, 2, 1, 1.8, 1.4, 0.5];
 
 function PreviewStat({ label, value }: { label: string; value: string }) {
   const c = useColors();
@@ -372,7 +436,7 @@ function MappingEditor({ table, mapping, onChange }: { table: Table; mapping: Ma
 }
 
 const styles = StyleSheet.create({
-  readable: { maxWidth: 760 },
+  readable: { maxWidth: 1000 },
   lead: { fontSize: 17, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 21 },
   small: { fontSize: 13 },
@@ -380,7 +444,12 @@ const styles = StyleSheet.create({
   previewStats: { flexDirection: 'row' },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   hr: { height: StyleSheet.hairlineWidth },
-  importRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, gap: space.sm },
+  importRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingHorizontal: space.lg, gap: space.md },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  tr: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
+  th: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  td: { fontSize: 14 },
+  num: { textAlign: 'right', fontVariant: ['tabular-nums'] },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   chipScroll: { flexDirection: 'row', gap: space.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },

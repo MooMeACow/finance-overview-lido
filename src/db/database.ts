@@ -6,11 +6,11 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
+import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; on web this is unused. */
 export type Db = SQLiteDatabase;
@@ -159,8 +159,20 @@ export async function getMainCurrency(db: Db): Promise<string> {
   return row?.currency ?? 'EUR';
 }
 
-export async function getImports(db: Db): Promise<ImportRecord[]> {
-  return db.getAllAsync<ImportRecord>('SELECT * FROM imports ORDER BY id DESC LIMIT 20');
+/** Every imported statement, newest first, with its period and totals. */
+export async function getImports(db: Db): Promise<ImportSummary[]> {
+  return db.getAllAsync<ImportSummary>(
+    `SELECT i.*,
+            MIN(t.date) AS first_date,
+            MAX(t.date) AS last_date,
+            COUNT(t.id) AS txn_count,
+            COALESCE(SUM(CASE WHEN t.excluded = 0 AND t.amount_cents > 0 THEN t.amount_cents END), 0) AS counted_in_cents,
+            COALESCE(SUM(CASE WHEN t.excluded = 0 AND t.amount_cents < 0 THEN -t.amount_cents END), 0) AS counted_out_cents
+       FROM imports i
+       LEFT JOIN transactions t ON t.import_id = i.id
+      GROUP BY i.id
+      ORDER BY i.id DESC`,
+  );
 }
 
 export async function countExisting(db: Db, hashes: string[]): Promise<number> {

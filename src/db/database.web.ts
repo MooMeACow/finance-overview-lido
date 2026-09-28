@@ -5,9 +5,9 @@
  */
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
+import type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
 
-export type { Txn, ImportRecord, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; unused on web. */
 export type Db = unknown;
@@ -156,8 +156,24 @@ export async function getMainCurrency(_db: Db): Promise<string> {
   return best;
 }
 
-export async function getImports(_db: Db): Promise<ImportRecord[]> {
-  return [...load().imports].sort((a, b) => b.id - a.id).slice(0, 20);
+/** Every imported statement, newest first, with its period and totals. */
+export async function getImports(_db: Db): Promise<ImportSummary[]> {
+  const data = load();
+  return [...data.imports]
+    .sort((a, b) => b.id - a.id)
+    .map((imp) => {
+      const txns = data.transactions.filter((t) => t.import_id === imp.id);
+      const dates = txns.map((t) => t.date).sort();
+      const counted = txns.filter((t) => t.excluded === 0);
+      return {
+        ...imp,
+        first_date: dates[0] ?? null,
+        last_date: dates[dates.length - 1] ?? null,
+        txn_count: txns.length,
+        counted_in_cents: counted.filter((t) => t.amount_cents > 0).reduce((s, t) => s + t.amount_cents, 0),
+        counted_out_cents: counted.filter((t) => t.amount_cents < 0).reduce((s, t) => s - t.amount_cents, 0),
+      };
+    });
 }
 
 export async function countExisting(_db: Db, hashes: string[]): Promise<number> {

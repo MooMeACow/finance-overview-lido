@@ -21,7 +21,8 @@ Built with React Native and Expo (SDK 57).
 - **No duplicates**: importing the same file twice only adds what's new. Two genuinely identical payments in one file are both kept.
 - **Categories that learn**: when you change a category, you can apply it to all transactions with the same description, and future imports remember it.
 - **Own-account transfers aren't counted**: moving money between your own accounts isn't income or spending, so these are imported but left out of totals automatically: Revolut top-ups, Revolut Digital Assets, ING savings (Oranje Spaarrekening) transfers and round-ups, ING investment-account transfers, and ING top-ups to Revolut. You can switch this per transaction ("Leave out of totals").
-- **Manual entries** and **undo an import**.
+- **Imported statements**: a list of every statement you imported (bank, period, number of transactions, counted money in/out). Delete one to remove all its transactions, e.g. to import it again.
+- **Manual entries**.
 - **Responsive design**: on a computer you get a left sidebar, KPI cards, side-by-side panels, sortable tables, hover tooltips on charts and editing in a side panel; on a phone a compact layout with a bottom tab bar.
 - Blue theme with light and dark mode.
 

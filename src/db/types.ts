@@ -21,6 +21,15 @@ export type ImportRecord = {
   row_count: number;
 };
 
+/** An import with what's still in it: date range and current number of transactions. */
+export type ImportSummary = ImportRecord & {
+  first_date: string | null;
+  last_date: string | null;
+  txn_count: number;
+  counted_in_cents: number;
+  counted_out_cents: number;
+};
+
 export type MonthTotals = { month: string; in_cents: number; out_cents: number };
 export type CategoryTotal = { category: string; out_cents: number; count: number };
 
