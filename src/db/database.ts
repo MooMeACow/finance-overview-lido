@@ -1,40 +1,23 @@
 /**
- * Local SQLite storage (expo-sqlite). Everything stays on the device.
+ * Local SQLite storage (expo-sqlite) for iOS and Android. Everything stays on the device.
+ * The web build uses database.web.ts instead (Metro picks it automatically).
  */
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
+import type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type Txn = {
-  id: number;
-  date: string;
-  description: string;
-  amount_cents: number;
-  currency: string;
-  category: string;
-  note: string | null;
-  excluded: number; // 1 = left out of totals (e.g. moving money between your own accounts)
-  source: string;
-  import_id: number | null;
-};
+export type { Txn, ImportRecord, MonthTotals, CategoryTotal } from './types';
 
-export type ImportRecord = {
-  id: number;
-  file_name: string;
-  source: string;
-  imported_at: string;
-  row_count: number;
-};
-
-export type MonthTotals = { month: string; in_cents: number; out_cents: number };
-export type CategoryTotal = { category: string; out_cents: number; count: number };
+/** Handle passed to every function; on web this is unused. */
+export type Db = SQLiteDatabase;
 
 const SCHEMA_VERSION = 1;
 
-export async function migrate(db: SQLiteDatabase): Promise<void> {
+export async function migrate(db: Db): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const version = row?.user_version ?? 0;
   if (version >= SCHEMA_VERSION) return;
@@ -73,12 +56,12 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
 
 // ---------- Reading ----------
 
-export async function getRules(db: SQLiteDatabase): Promise<Map<string, string>> {
+export async function getRules(db: Db): Promise<Map<string, string>> {
   const rows = await db.getAllAsync<{ match: string; category: string }>('SELECT match, category FROM rules');
   return new Map(rows.map((r) => [r.match, r.category]));
 }
 
-export async function getMonthTotals(db: SQLiteDatabase, endMonth: string, count: number): Promise<MonthTotals[]> {
+export async function getMonthTotals(db: Db, endMonth: string, count: number): Promise<MonthTotals[]> {
   const start = shiftMonth(endMonth, -(count - 1));
   const rows = await db.getAllAsync<MonthTotals>(
     `SELECT substr(date, 1, 7) AS month,
@@ -96,7 +79,7 @@ export async function getMonthTotals(db: SQLiteDatabase, endMonth: string, count
   });
 }
 
-export async function getCategoryTotals(db: SQLiteDatabase, month: string): Promise<CategoryTotal[]> {
+export async function getCategoryTotals(db: Db, month: string): Promise<CategoryTotal[]> {
   return db.getAllAsync<CategoryTotal>(
     `SELECT category, SUM(-amount_cents) AS out_cents, COUNT(*) AS count
        FROM transactions
@@ -108,7 +91,7 @@ export async function getCategoryTotals(db: SQLiteDatabase, month: string): Prom
 }
 
 export async function getTransactions(
-  db: SQLiteDatabase,
+  db: Db,
   month: string,
   opts: { search?: string; direction?: 'all' | 'in' | 'out'; category?: string } = {},
 ): Promise<Txn[]> {
@@ -134,24 +117,24 @@ export async function getTransactions(
 }
 
 /** The most recent month that has data, or null if the database is empty. */
-export async function getLatestMonth(db: SQLiteDatabase): Promise<string | null> {
+export async function getLatestMonth(db: Db): Promise<string | null> {
   const row = await db.getFirstAsync<{ m: string | null }>('SELECT substr(MAX(date), 1, 7) AS m FROM transactions');
   return row?.m ?? null;
 }
 
 /** Most common currency, used for formatting totals. */
-export async function getMainCurrency(db: SQLiteDatabase): Promise<string> {
+export async function getMainCurrency(db: Db): Promise<string> {
   const row = await db.getFirstAsync<{ currency: string }>(
     'SELECT currency FROM transactions GROUP BY currency ORDER BY COUNT(*) DESC LIMIT 1',
   );
   return row?.currency ?? 'EUR';
 }
 
-export async function getImports(db: SQLiteDatabase): Promise<ImportRecord[]> {
+export async function getImports(db: Db): Promise<ImportRecord[]> {
   return db.getAllAsync<ImportRecord>('SELECT * FROM imports ORDER BY id DESC LIMIT 20');
 }
 
-export async function countExisting(db: SQLiteDatabase, hashes: string[]): Promise<number> {
+export async function countExisting(db: Db, hashes: string[]): Promise<number> {
   let found = 0;
   // Chunk to stay under SQLite's parameter limit
   for (let i = 0; i < hashes.length; i += 500) {
@@ -169,7 +152,7 @@ export async function countExisting(db: SQLiteDatabase, hashes: string[]): Promi
 
 /** Inserts parsed rows, skipping ones already imported. Returns how many were added. */
 export async function importTransactions(
-  db: SQLiteDatabase,
+  db: Db,
   fileName: string,
   source: string,
   txns: ParsedTxn[],
@@ -199,7 +182,7 @@ export async function importTransactions(
 }
 
 export async function addManualTransaction(
-  db: SQLiteDatabase,
+  db: Db,
   t: { date: string; description: string; amountCents: number; currency: string; category: string; note?: string },
 ): Promise<void> {
   await db.runAsync(
@@ -210,7 +193,7 @@ export async function addManualTransaction(
 }
 
 export async function updateTransaction(
-  db: SQLiteDatabase,
+  db: Db,
   id: number,
   patch: { category: string; note: string | null; excluded: boolean },
 ): Promise<void> {
@@ -226,7 +209,7 @@ export async function updateTransaction(
  * Sets the category for every transaction with the same description and
  * remembers it for future imports. Returns how many transactions changed.
  */
-export async function applyCategoryToSimilar(db: SQLiteDatabase, description: string, category: string): Promise<number> {
+export async function applyCategoryToSimilar(db: Db, description: string, category: string): Promise<number> {
   const key = description.trim().toLowerCase();
   let changed = 0;
   await db.withTransactionAsync(async () => {
@@ -237,17 +220,17 @@ export async function applyCategoryToSimilar(db: SQLiteDatabase, description: st
   return changed;
 }
 
-export async function deleteTransaction(db: SQLiteDatabase, id: number): Promise<void> {
+export async function deleteTransaction(db: Db, id: number): Promise<void> {
   await db.runAsync('DELETE FROM transactions WHERE id = ?', [id]);
 }
 
-export async function deleteImport(db: SQLiteDatabase, importId: number): Promise<void> {
+export async function deleteImport(db: Db, importId: number): Promise<void> {
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM transactions WHERE import_id = ?', [importId]);
     await db.runAsync('DELETE FROM imports WHERE id = ?', [importId]);
   });
 }
 
-export async function deleteAllData(db: SQLiteDatabase): Promise<void> {
+export async function deleteAllData(db: Db): Promise<void> {
   await db.execAsync('DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules;');
 }

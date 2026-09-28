@@ -1,6 +1,6 @@
 # Finance Overview
 
-A simple, private money tracker for your phone. Import a bank statement (CSV), see a monthly overview of money in and out, and browse, categorize and add transactions. Everything is stored on your device in a local SQLite database; nothing is uploaded anywhere.
+A simple, private money tracker that works in your phone's browser (and as an iOS/Android app). Import a bank statement (CSV), see a monthly overview of money in and out, and browse, categorize and add transactions. Everything is stored on your device; nothing is uploaded anywhere.
 
 Built with React Native and Expo (SDK 57).
 
@@ -15,19 +15,51 @@ Built with React Native and Expo (SDK 57).
 - **Undo an import**: remove everything a specific import added.
 - Light and dark mode.
 
-## Run it
+## Run it (web)
 
-You need [Node.js](https://nodejs.org) (LTS), [pnpm](https://pnpm.io), and the **Expo Go** app on your phone (App Store / Google Play).
+The app runs in any browser, including your phone's. On a Mac:
+
+**1. Install the tools (once).** You need [Node.js](https://nodejs.org) (LTS). If the `pnpm` command isn't found, install it globally:
+
+```bash
+npm install -g pnpm
+pnpm -v            # should print a version number
+```
+
+If that gives a permissions error and you use Homebrew, `brew install pnpm` works too. Or skip installing and put `npx` in front of every `pnpm` command below (e.g. `npx pnpm install`).
+
+**2. Install and start** (in the project folder):
 
 ```bash
 pnpm install
 pnpm expo install --fix   # aligns package versions with the Expo SDK
-pnpm start
+pnpm web
 ```
 
-Scan the QR code with your phone's camera (iOS) or the Expo Go app (Android). Your phone and computer need to be on the same Wi-Fi network.
+The terminal shows a local address (usually `http://localhost:8081`). Open it in your Mac's browser.
 
-Expo Go only supports the latest SDK. If Expo Go says the project's SDK is incompatible, run `pnpm expo install expo@latest && pnpm expo install --fix` to upgrade.
+**3. Open it on your phone.** With your phone on the same Wi-Fi as your Mac:
+
+- Find your Mac's local IP address: `ipconfig getifaddr en0` (or System Settings → Wi-Fi → Details).
+- On your phone, open `http://<that-ip>:8081`, e.g. `http://192.168.1.23:8081`.
+- If macOS asks whether to allow incoming connections for Node, allow it.
+
+This works while `pnpm web` is running on your Mac. To use it anywhere without your Mac, the site needs to be hosted online; see "Publishing" below.
+
+### Where your data is stored
+
+- **Web:** in the browser you use (browser storage). Each browser and device has its own separate data, so data you import on your Mac won't appear on your phone. Clearing the browser's website data deletes it.
+- **iOS/Android app:** in a SQLite database on the device.
+
+Nothing is uploaded anywhere in either case.
+
+### Publishing (later)
+
+`pnpm build:web` creates a static website in the `dist` folder, which any static host can serve (for example EAS Hosting, Netlify, Vercel or GitHub Pages). Not set up yet.
+
+## Run it (phone app)
+
+Install the **Expo Go** app on your phone, run `pnpm start`, and scan the QR code. Expo Go only supports the latest SDK; if it says the project's SDK is incompatible, run `pnpm expo install expo@latest && pnpm expo install --fix`.
 
 ### If pnpm causes build errors
 
@@ -39,7 +71,7 @@ nodeLinker: hoisted
 
 ## Tests
 
-The CSV parsing, amount/date handling and Revolut import are covered by tests that run with Node's built-in test runner (Node 22+):
+The CSV parsing, amount/date handling, Revolut import and the web storage are covered by tests that run with Node's built-in test runner (Node 22+):
 
 ```bash
 pnpm test
@@ -55,10 +87,13 @@ In the Revolut app: open your account → **Statement** → choose **Excel/CSV**
 
 ```
 App.tsx                      Tab navigation, database provider
-src/db/database.ts           SQLite schema and all queries
+src/db/database.ts           Phone storage: SQLite schema and queries
+src/db/database.web.ts       Web storage: same functions, using browser storage
+src/db/provider(.web).tsx    Picks the right storage per platform
 src/lib/csv.ts               CSV parser (no dependencies)
 src/lib/money.ts             Amount parsing and formatting (integer cents)
 src/lib/dates.ts             Date parsing and month helpers
+src/lib/dialogs.ts           Confirm/alert dialogs that also work in the browser
 src/lib/categories.ts        Categories and auto-categorization rules
 src/lib/importers.ts         Revolut and generic bank CSV import
 src/screens/                 Overview, Transactions, Import

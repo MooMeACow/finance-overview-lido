@@ -11,6 +11,12 @@
     "android": {
       "edgeToEdgeEnabled": true
     },
-    "plugins": ["expo-sqlite"]
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
   }
 }

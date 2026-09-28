@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from './db/provider';
 
 import { currentMonthKey } from './lib/dates';
 import { getLatestMonth, getMainCurrency } from './db/database';
@@ -16,7 +16,7 @@ type AppState = {
 const Ctx = createContext<AppState | null>(null);
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const [month, setMonth] = useState(currentMonthKey());
   const [currency, setCurrency] = useState('EUR');
   const [version, setVersion] = useState(0);

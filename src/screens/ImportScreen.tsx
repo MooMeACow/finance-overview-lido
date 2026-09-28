@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { File } from 'expo-file-system';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '../db/provider';
+import { confirmAction, notify } from '../lib/dialogs';
+import { readPickedFile } from '../lib/readPickedFile';
 
 import { Button, Card, Chip, FieldLabel, IconButton, ScreenHeader, SectionTitle, inputStyle } from '../components/ui';
 import { space, useColors } from '../theme';
@@ -32,7 +33,7 @@ import {
 type Loaded = { fileName: string; table: Table; source: 'revolut' | 'csv' };
 
 export function ImportScreen({ onDone }: { onDone: () => void }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const c = useColors();
   const { refresh, setMonth, version } = useAppState();
 
@@ -69,10 +70,10 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       if (res.canceled || !res.assets?.length) return;
       const asset = res.assets[0];
       setBusy(true);
-      const text = await new File(asset.uri).text();
+      const text = await readPickedFile(asset);
       const table = toTable(text);
       if (table.headers.length < 2 || table.rows.length === 0) {
-        Alert.alert('Could not read this file', 'Make sure it is a CSV export with a header row.');
+        notify('Could not read this file', 'Make sure it is a CSV export with a header row.');
         return;
       }
       const revolut = isRevolut(table.headers);
@@ -80,7 +81,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       setMapping(revolut ? null : suggestMapping(table));
       setLoaded({ fileName: asset.name ?? 'statement.csv', table, source: revolut ? 'revolut' : 'csv' });
     } catch (e) {
-      Alert.alert('Could not open file', String(e instanceof Error ? e.message : e));
+      notify('Could not open file', String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
     }
@@ -101,44 +102,38 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       if (latest) setMonth(latest.slice(0, 7));
       refresh();
       reset();
-      Alert.alert(
+      notify(
         added > 0 ? 'Import complete' : 'Nothing new',
         added > 0 ? `Added ${added} transaction${added === 1 ? '' : 's'}.` : 'All of these transactions were already imported.',
-        [{ text: 'View overview', onPress: onDone }, { text: 'OK' }],
       );
+      if (added > 0) onDone();
     } catch (e) {
-      Alert.alert('Import failed', String(e instanceof Error ? e.message : e));
+      notify('Import failed', String(e instanceof Error ? e.message : e));
     } finally {
       setBusy(false);
     }
   };
 
-  const removeImport = (imp: ImportRecord) => {
-    Alert.alert('Remove this import?', `Deletes the ${imp.row_count} transactions added from ${imp.file_name}.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteImport(db, imp.id);
-          refresh();
-        },
-      },
-    ]);
+  const removeImport = async (imp: ImportRecord) => {
+    const ok = await confirmAction(
+      'Remove this import?',
+      `Deletes the ${imp.row_count} transactions added from ${imp.file_name}.`,
+      'Remove',
+    );
+    if (!ok) return;
+    await deleteImport(db, imp.id);
+    refresh();
   };
 
-  const wipe = () => {
-    Alert.alert('Delete all data?', 'Removes every transaction, import and category rule from this device.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete everything',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteAllData(db);
-          refresh();
-        },
-      },
-    ]);
+  const wipe = async () => {
+    const ok = await confirmAction(
+      'Delete all data?',
+      'Removes every transaction, import and category rule stored here.',
+      'Delete everything',
+    );
+    if (!ok) return;
+    await deleteAllData(db);
+    refresh();
   };
 
   const newCount = result ? result.txns.length - existing : 0;
@@ -256,7 +251,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
           <SectionTitle>Your data</SectionTitle>
           <Card style={{ gap: space.md }}>
             <Text style={[styles.body, { color: c.textSecondary }]}>
-              Everything is stored only on this device. Nothing is uploaded anywhere.
+              {Platform.OS === 'web'
+                ? 'Everything is stored only in this browser on this device. Nothing is uploaded anywhere. Other browsers and devices have their own separate data.'
+                : 'Everything is stored only on this device. Nothing is uploaded anywhere.'}
             </Text>
             <Button label="Delete all data" variant="danger" icon="trash-outline" onPress={wipe} />
           </Card>

@@ -1,0 +1,82 @@
+import { test, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+// Minimal localStorage for Node
+const store = new Map<string, string>();
+(globalThis as any).localStorage = {
+  getItem: (k: string) => store.get(k) ?? null,
+  setItem: (k: string, v: string) => void store.set(k, v),
+  removeItem: (k: string) => void store.delete(k),
+};
+
+import { toTable } from '../src/lib/csv.ts';
+import { parseRevolut } from '../src/lib/importers.ts';
+import * as db from '../src/db/database.web.ts';
+
+const csv = readFileSync(new URL('./fixtures/revolut-sample.csv', import.meta.url), 'utf8');
+const parsed = () => parseRevolut(toTable(csv)).txns;
+
+beforeEach(async () => {
+  await db.deleteAllData(null);
+});
+
+test('web storage: import, dedupe, totals', async () => {
+  assert.equal(await db.importTransactions(null, 'a.csv', 'revolut', parsed()), 25);
+  assert.equal(await db.importTransactions(null, 'a.csv', 'revolut', parsed()), 0, 're-import adds nothing');
+  assert.equal(await db.countExisting(null, parsed().map((t) => t.hash)), 25);
+  assert.equal((await db.getImports(null)).length, 1);
+
+  const [aug, sep] = await db.getMonthTotals(null, '2026-09', 2);
+  assert.deepEqual(sep, { month: '2026-09', in_cents: 105000, out_cents: 65246 });
+  assert.deepEqual(aug, { month: '2026-08', in_cents: 0, out_cents: 1000 });
+
+  const cats = await db.getCategoryTotals(null, '2026-09');
+  assert.equal(cats[0].category, 'transfers');
+  assert.equal(cats.reduce((s, c) => s + c.out_cents, 0), 65246);
+
+  assert.equal(await db.getLatestMonth(null), '2026-09');
+  assert.equal(await db.getMainCurrency(null), 'EUR');
+});
+
+test('web storage: filters, edits, rules, excluded, delete', async () => {
+  await db.importTransactions(null, 'a.csv', 'revolut', parsed());
+
+  const outOnly = await db.getTransactions(null, '2026-09', { direction: 'out' });
+  assert.ok(outOnly.every((t) => t.amount_cents < 0));
+  const all = await db.getTransactions(null, '2026-09');
+  assert.ok(all[0].date >= all[all.length - 1].date, 'newest first');
+
+  const tripper = await db.getTransactions(null, '2026-09', { search: 'tripper' });
+  assert.equal(tripper.length, 2);
+
+  // Recategorize all Tripper payments and remember the rule
+  assert.equal(await db.applyCategoryToSimilar(null, 'To Tripper B.V.', 'transport'), 2);
+  assert.equal((await db.getRules(null)).get('to tripper b.v.'), 'transport');
+  assert.equal((await db.getTransactions(null, '2026-09', { category: 'transport' })).length, 2);
+
+  // Exclude a top-up from totals
+  const topup = all.find((t) => t.amount_cents === 83000)!;
+  await db.updateTransaction(null, topup.id, { category: 'topup', note: 'from ING', excluded: true });
+  const [sep] = await db.getMonthTotals(null, '2026-09', 1);
+  assert.equal(sep.in_cents, 105000 - 83000);
+  assert.equal((await db.getTransactions(null, '2026-09', { search: 'from ing' })).length, 1);
+
+  // Manual entry, then delete it
+  await db.addManualTransaction(null, { date: '2026-09-28 12:00:00', description: 'Market', amountCents: -1250, currency: 'EUR', category: 'groceries' });
+  const market = (await db.getTransactions(null, '2026-09', { search: 'market' }))[0];
+  assert.equal(market.source, 'manual');
+  await db.deleteTransaction(null, market.id);
+  assert.equal((await db.getTransactions(null, '2026-09', { search: 'market' })).length, 0);
+
+  // Undo the import
+  const [imp] = await db.getImports(null);
+  await db.deleteImport(null, imp.id);
+  assert.equal((await db.getTransactions(null, '2026-09')).length, 0);
+});
+
+test('web storage: survives a reload', async () => {
+  await db.importTransactions(null, 'a.csv', 'revolut', parsed());
+  const saved = JSON.parse(store.get('finance-overview:v1')!);
+  assert.equal(saved.transactions.length, 25);
+});

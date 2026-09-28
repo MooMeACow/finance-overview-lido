@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '../db/provider';
 
 import { Button, Card, EmptyState, MonthSwitcher, ScreenHeader, SectionTitle, type IconName } from '../components/ui';
 import { MonthlyBars } from '../components/MonthlyBars';
@@ -22,7 +22,7 @@ import {
 } from '../db/database';
 
 export function OverviewScreen({ onImport, onShowCategory }: { onImport: () => void; onShowCategory: (c: string) => void }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const c = useColors();
   const { month, setMonth, currency, version } = useAppState();
   const [history, setHistory] = useState<MonthTotals[]>([]);

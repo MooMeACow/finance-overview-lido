@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SQLiteProvider } from 'expo-sqlite';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DATABASE_NAME, migrate } from './src/db/database';
+import { DbProvider } from './src/db/provider';
 import { AppStateProvider } from './src/state';
 import { OverviewScreen } from './src/screens/OverviewScreen';
 import { TransactionsScreen } from './src/screens/TransactionsScreen';
@@ -24,11 +23,11 @@ const TABS: { key: Tab; label: string; icon: IconName; iconActive: IconName }[] 
 export default function App() {
   return (
     <SafeAreaProvider>
-      <SQLiteProvider databaseName={DATABASE_NAME} onInit={migrate}>
+      <DbProvider>
         <AppStateProvider>
           <Main />
         </AppStateProvider>
-      </SQLiteProvider>
+      </DbProvider>
     </SafeAreaProvider>
   );
 }
@@ -41,28 +40,31 @@ function Main() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top', 'left', 'right']}>
       <StatusBar style="auto" />
-      <View style={{ flex: 1 }}>
-        {tab === 'overview' ? (
-          <OverviewScreen
-            onImport={() => setTab('import')}
-            onShowCategory={(cat) => {
-              setCategoryFilter(cat);
-              setTab('transactions');
-            }}
-          />
-        ) : null}
-        {tab === 'transactions' ? (
-          <TransactionsScreen categoryFilter={categoryFilter} onClearCategory={() => setCategoryFilter(null)} />
-        ) : null}
-        {tab === 'import' ? <ImportScreen onDone={() => setTab('overview')} /> : null}
+      {/* On wide screens (desktop browsers) keep the app phone-width and centered */}
+      <View style={styles.column}>
+        <View style={{ flex: 1 }}>
+          {tab === 'overview' ? (
+            <OverviewScreen
+              onImport={() => setTab('import')}
+              onShowCategory={(cat) => {
+                setCategoryFilter(cat);
+                setTab('transactions');
+              }}
+            />
+          ) : null}
+          {tab === 'transactions' ? (
+            <TransactionsScreen categoryFilter={categoryFilter} onClearCategory={() => setCategoryFilter(null)} />
+          ) : null}
+          {tab === 'import' ? <ImportScreen onDone={() => setTab('overview')} /> : null}
+        </View>
+        <TabBar
+          active={tab}
+          onChange={(t) => {
+            if (t !== 'transactions') setCategoryFilter(null);
+            setTab(t);
+          }}
+        />
       </View>
-      <TabBar
-        active={tab}
-        onChange={(t) => {
-          if (t !== 'transactions') setCategoryFilter(null);
-          setTab(t);
-        }}
-      />
     </SafeAreaView>
   );
 }
@@ -100,6 +102,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  column: { flex: 1, width: '100%', maxWidth: 640, alignSelf: 'center' },
   tabBar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
   tab: { flex: 1, alignItems: 'center', gap: 2 },
   tabLabel: { fontSize: 11 },

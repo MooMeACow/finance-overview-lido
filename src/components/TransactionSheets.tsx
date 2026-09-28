@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { useSQLiteContext } from 'expo-sqlite';
+import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { useDb } from '../db/provider';
+import { confirmAction, notify } from '../lib/dialogs';
 
 import { Button, FieldLabel, Money, Sheet, inputStyle } from './ui';
 import { CategoryPicker } from './CategoryPicker';
@@ -18,7 +19,7 @@ import { useAppState } from '../state';
 
 /** Edit an existing transaction: category, note, exclude from totals, delete. */
 export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClose: () => void }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const c = useColors();
   const { refresh } = useAppState();
   const [category, setCategory] = useState('other');
@@ -46,19 +47,11 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
     onClose();
   };
 
-  const remove = () => {
-    Alert.alert('Delete transaction?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await deleteTransaction(db, txn.id);
-          refresh();
-          onClose();
-        },
-      },
-    ]);
+  const remove = async () => {
+    if (!(await confirmAction('Delete transaction?', 'This cannot be undone.', 'Delete'))) return;
+    await deleteTransaction(db, txn.id);
+    refresh();
+    onClose();
   };
 
   return (
@@ -105,7 +98,7 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
 
 /** Add a transaction by hand, e.g. a cash payment. */
 export function AddTransactionSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const c = useColors();
   const { refresh, currency, setMonth } = useAppState();
   const [direction, setDirection] = useState<'out' | 'in'>('out');
@@ -129,11 +122,11 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
   const save = async () => {
     const cents = parseAmount(amount);
     if (cents === null || cents === 0) {
-      Alert.alert('Enter an amount', 'For example 12.50');
+      notify('Enter an amount', 'For example 12.50');
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
-      Alert.alert('Check the date', 'Use the format YYYY-MM-DD, for example 2026-09-28');
+      notify('Check the date', 'Use the format YYYY-MM-DD, for example 2026-09-28');
       return;
     }
     const signed = direction === 'out' ? -Math.abs(cents) : Math.abs(cents);

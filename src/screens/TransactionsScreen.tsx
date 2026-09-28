@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useDb } from '../db/provider';
 
 import { Chip, EmptyState, IconButton, MonthSwitcher, ScreenHeader, inputStyle } from '../components/ui';
 import { TransactionRow } from '../components/TransactionRow';
@@ -22,7 +22,7 @@ export function TransactionsScreen({
   categoryFilter: string | null;
   onClearCategory: () => void;
 }) {
-  const db = useSQLiteContext();
+  const db = useDb();
   const c = useColors();
   const { month, setMonth, version, currency } = useAppState();
   const [search, setSearch] = useState('');
