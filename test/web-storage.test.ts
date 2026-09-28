@@ -161,3 +161,14 @@ test('web storage: imported statements list with period, counts, delete', async 
   assert.deepEqual(after.map((i) => i.file_name), ['ing.csv']);
   assert.equal((await db.getTransactions(null, '2026-09', { search: 'tripper' })).length, 0);
 });
+
+test('web storage: debts', async () => {
+  await db.saveDebt(null, { person: 'Sam', direction: 'owed_to_me', amountCents: 43000, note: '₱30,000' });
+  await db.saveDebt(null, { person: 'Alex', direction: 'i_owe', amountCents: 5000, note: null });
+  let debts = await db.getDebts(null);
+  assert.deepEqual(debts.map((d) => [d.person, d.direction, d.amount_cents]), [['Alex', 'i_owe', 5000], ['Sam', 'owed_to_me', 43000]]);
+  await db.saveDebt(null, { id: debts[1].id, person: 'Sam', direction: 'owed_to_me', amountCents: 30000, note: 'paid €130 back' });
+  await db.deleteDebt(null, debts[0].id);
+  debts = await db.getDebts(null);
+  assert.deepEqual(debts.map((d) => [d.person, d.amount_cents, d.note]), [['Sam', 30000, 'paid €130 back']]);
+});

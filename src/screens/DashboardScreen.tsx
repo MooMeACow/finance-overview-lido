@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { Columns, KpiCard, KpiRow, Page, Panel, ScreenHeader, type IconName } from '../components/ui';
 import { ForecastBars } from '../components/ForecastBars';
-import { AccountSheet, BudgetSheet, PlanSheet } from '../components/PlanningSheets';
+import { AccountSheet, BudgetSheet, DebtSheet, PlanSheet } from '../components/PlanningSheets';
 import { space, radius, useColors } from '../theme';
 import { useLayout } from '../layout';
 import { useAppState } from '../state';
@@ -17,10 +17,12 @@ import {
   type Account,
   type Budget,
   type CategoryTotal,
+  type Debt,
   type Plan,
   getAccounts,
   getBudgets,
   getCategoryTotals,
+  getDebts,
   getPlans,
 } from '../db/database';
 
@@ -36,6 +38,8 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const [plans, setPlans] = useState<Plan[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [spent, setSpent] = useState<CategoryTotal[]>([]);
+  const [debts, setDebts] = useState<Debt[]>([]);
+  const [debtSheet, setDebtSheet] = useState<{ open: boolean; debt: Debt | null }>({ open: false, debt: null });
   const [selectedForecast, setSelectedForecast] = useState(thisMonth);
 
   // Sheets
@@ -46,17 +50,19 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [a, p, b, s] = await Promise.all([
+      const [a, p, b, s, d] = await Promise.all([
         getAccounts(db),
         getPlans(db),
         getBudgets(db),
         getCategoryTotals(db, thisMonth),
+        getDebts(db),
       ]);
       if (!alive) return;
       setAccounts(a);
       setPlans(p);
       setBudgets(b);
       setSpent(s);
+      setDebts(d);
     })();
     return () => {
       alive = false;
@@ -231,6 +237,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const plansPanel = (
     <Panel
       title="Plans"
+      style={{ flex: 1 }}
       padded={!isWide}
       right={
         <View style={styles.inline}>
@@ -256,6 +263,51 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
           Per month on average: {formatMoney(monthlyIn, currency, 'always')} in · {formatMoney(-monthlyOut, currency)} out
         </Text>
       ) : null}
+    </Panel>
+  );
+
+  const owedToMe = debts.filter((d) => d.direction === 'owed_to_me');
+  const iOwe = debts.filter((d) => d.direction === 'i_owe');
+  const debtsPanel = (
+    <Panel
+      title="Debts"
+      style={{ flex: 1 }}
+      right={<SmallAction label="Add" icon="add" onPress={() => setDebtSheet({ open: true, debt: null })} />}
+    >
+      {debts.length === 0 ? (
+        <Text style={[styles.body, { color: c.textSecondary }]}>Keep track of money people owe you, or that you owe.</Text>
+      ) : (
+        <View style={{ gap: space.md }}>
+          {[
+            { title: 'Owed to you', list: owedToMe },
+            { title: 'You owe', list: iOwe },
+          ]
+            .filter((g) => g.list.length > 0)
+            .map((g) => (
+              <View key={g.title}>
+                <View style={styles.between}>
+                  <Text style={{ color: c.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>{g.title}</Text>
+                  <Text style={[styles.amount, { color: c.text, fontSize: 13 }]}>
+                    {formatMoney(g.list.reduce((s, d) => s + d.amount_cents, 0), currency)}
+                  </Text>
+                </View>
+                {g.list.map((d, i) => (
+                  <HoverRow key={d.id} onPress={() => setDebtSheet({ open: true, debt: d })} first={i === 0}>
+                    <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
+                      <Text style={{ color: c.primary, fontWeight: '700' }}>{d.person.slice(0, 1).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{d.person}</Text>
+                      {d.note ? <Text style={[styles.rowSub, { color: c.textMuted }]} numberOfLines={1}>{d.note}</Text> : null}
+                    </View>
+                    <Text style={[styles.amount, { color: c.text }]}>{formatMoney(d.amount_cents, currency)}</Text>
+                  </HoverRow>
+                ))}
+              </View>
+            ))}
+          <Text style={{ color: c.textMuted, fontSize: 12, lineHeight: 17 }}>Not included in your total money or forecast.</Text>
+        </View>
+      )}
     </Panel>
   );
 
@@ -314,7 +366,10 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
         {budgetsPanel}
       </Columns>
 
-      {plansPanel}
+      <Columns weights={[2, 1]} breakpoint="wide">
+        {plansPanel}
+        {debtsPanel}
+      </Columns>
 
       <AccountSheet visible={accountSheet.open} account={accountSheet.account} onClose={() => setAccountSheet({ open: false, account: null })} />
       <PlanSheet
@@ -323,6 +378,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
         defaultKind={planSheet.kind}
         onClose={() => setPlanSheet((s) => ({ ...s, open: false, plan: null }))}
       />
+      <DebtSheet visible={debtSheet.open} debt={debtSheet.debt} onClose={() => setDebtSheet({ open: false, debt: null })} />
       <BudgetSheet
         visible={budgetSheet.open}
         category={budgetSheet.budget?.category ?? null}

@@ -13,6 +13,8 @@ import { type Table, toTable } from '../lib/csv';
 import { DATE_FORMATS, dayLabel, shortDate } from '../lib/dates';
 import { formatMoney } from '../lib/money';
 import { getCategory } from '../lib/categories';
+import { type Setup, isSetupFile, parseSetupFile, planSetupImport } from '../lib/setupFile';
+import { frequencyLabel } from '../lib/forecast';
 import {
   type Mapping,
   type ParseResult,
@@ -29,11 +31,18 @@ import {
   deleteAllData,
   deleteImport,
   getImports,
+  getDebts,
+  getPlans,
   getRules,
   importTransactions,
+  saveDebt,
+  savePlan,
+  setBudget,
 } from '../db/database';
 
 type Loaded = { fileName: string; table: Table; source: 'revolut' | 'ing' | 'csv' };
+
+type LoadedSetup = { fileName: string; data: Setup; toAdd: ReturnType<typeof planSetupImport> };
 
 const SOURCE_LABEL = { revolut: 'Revolut statement', ing: 'ING statement', csv: 'Bank CSV' };
 
@@ -44,6 +53,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const { isWide } = useLayout();
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [setup, setSetup] = useState<LoadedSetup | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
   const [rules, setRules] = useState<Map<string, string>>(new Map());
   const [existing, setExisting] = useState(0);
@@ -78,6 +88,13 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       const asset = res.assets[0];
       setBusy(true);
       const text = await readPickedFile(asset);
+      if (isSetupFile(text)) {
+        // A plans file: plans, budgets and debts to add in one go
+        const data = parseSetupFile(text);
+        const [plans, debts] = await Promise.all([getPlans(db), getDebts(db)]);
+        setSetup({ fileName: asset.name ?? 'plans.json', data, toAdd: planSetupImport({ plans, debts }, data) });
+        return;
+      }
       const table = toTable(text);
       if (table.headers.length < 2 || table.rows.length === 0) {
         notify('Could not read this file', 'Make sure it is a CSV export with a header row.');
@@ -94,7 +111,29 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
     }
   }, [db]);
 
+  const importSetup = async () => {
+    if (!setup) return;
+    setBusy(true);
+    try {
+      const { plans, budgets, debts } = setup.toAdd;
+      for (const p of plans) await savePlan(db, p);
+      for (const b of budgets) await setBudget(db, b.category, b.limit_cents);
+      for (const d of debts) await saveDebt(db, { person: d.person, direction: d.direction, amountCents: d.amount_cents, note: d.note });
+      refresh();
+      setSetup(null);
+      notify(
+        'Plans imported',
+        `Added ${plans.length} plan${plans.length === 1 ? '' : 's'}, ${budgets.length} budget${budgets.length === 1 ? '' : 's'} and ${debts.length} debt${debts.length === 1 ? '' : 's'}. You'll find them on the Dashboard.`,
+      );
+    } catch (e) {
+      notify('Import failed', String(e instanceof Error ? e.message : e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const reset = () => {
+    setSetup(null);
     setLoaded(null);
     setMapping(null);
     setExisting(0);
@@ -160,15 +199,18 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       <ScreenHeader title="Import" subtitle={isWide ? 'Add bank statements and manage your data' : undefined} />
       <View style={isWide ? styles.readable : undefined}>
 
-      {!loaded ? (
+      {setup ? (
+        <SetupPreview setup={setup} busy={busy} onImport={importSetup} onCancel={reset} />
+      ) : !loaded ? (
         <Card style={{ gap: space.md }}>
           <Text style={[styles.lead, { color: c.text }]}>Add a bank statement</Text>
           <Text style={[styles.body, { color: c.textSecondary }]}>
             Export your transactions as a CSV file from your bank's app or website, then choose it here. Revolut
             and ING statements are recognised automatically; for other banks you can tell the app which column is which.
-            Importing the same file twice won't create duplicates.
+            Importing the same file twice won't create duplicates. You can also choose a plans file (.json) to add
+            plans, budgets and debts in one go.
           </Text>
-          <Button label={busy ? 'Opening…' : 'Choose CSV file'} icon="document-attach-outline" onPress={pickFile} disabled={busy} />
+          <Button label={busy ? 'Opening…' : 'Choose file'} icon="document-attach-outline" onPress={pickFile} disabled={busy} />
         </Card>
       ) : (
         <>
@@ -250,14 +292,14 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {!loaded ? (
+      {!loaded && !setup ? (
         <>
           <SectionTitle>Imported statements</SectionTitle>
           <ImportedStatements imports={imports} onDelete={removeImport} />
         </>
       ) : null}
 
-      {!loaded ? (
+      {!loaded && !setup ? (
         <>
           <SectionTitle>Your data</SectionTitle>
           <Card style={{ gap: space.md }}>
@@ -272,6 +314,92 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       ) : null}
       </View>
     </Page>
+  );
+}
+
+/** Preview of a plans file before adding it. */
+function SetupPreview({
+  setup,
+  busy,
+  onImport,
+  onCancel,
+}: {
+  setup: LoadedSetup;
+  busy: boolean;
+  onImport: () => void;
+  onCancel: () => void;
+}) {
+  const c = useColors();
+  const { plans, budgets, debts, skipped } = setup.toAdd;
+  const nothing = plans.length + budgets.length + debts.length === 0;
+  const line = (left: string, sub: string, right: string, key: string, positive = false) => (
+    <View key={key} style={styles.previewRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: c.text, fontSize: 14 }} numberOfLines={1}>{left}</Text>
+        <Text style={{ color: c.textMuted, fontSize: 12 }} numberOfLines={1}>{sub}</Text>
+      </View>
+      <Text style={{ color: positive ? c.positive : c.text, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{right}</Text>
+    </View>
+  );
+  return (
+    <>
+      <Card style={{ gap: space.xs }}>
+        <View style={styles.fileRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.lead, { color: c.text }]} numberOfLines={1}>{setup.fileName}</Text>
+            <Text style={[styles.body, { color: c.textSecondary }]}>
+              Plans file · {plans.length} plans, {budgets.length} budgets, {debts.length} debts to add
+            </Text>
+          </View>
+          <IconButton icon="close" label="Cancel" onPress={onCancel} />
+        </View>
+        {skipped > 0 ? (
+          <Text style={[styles.small, { color: c.textSecondary }]}>{skipped} item{skipped === 1 ? ' is' : 's are'} already in the app and will be skipped.</Text>
+        ) : null}
+      </Card>
+
+      {plans.length > 0 ? (
+        <>
+          <SectionTitle>Plans</SectionTitle>
+          <Card style={{ gap: space.md }}>
+            {plans.map((p, i) =>
+              line(
+                p.description,
+                `${frequencyLabel({ ...p, id: 0 })}${p.kind === 'expense' ? ` · ${getCategory(p.category).label}` : ''}`,
+                formatMoney(p.kind === 'income' ? p.amount_cents : -p.amount_cents, 'EUR', 'always'),
+                `p${i}`,
+                p.kind === 'income',
+              ),
+            )}
+          </Card>
+        </>
+      ) : null}
+
+      {budgets.length > 0 ? (
+        <>
+          <SectionTitle>Monthly budgets</SectionTitle>
+          <Card style={{ gap: space.md }}>
+            {budgets.map((b) => line(getCategory(b.category).label, 'Per month', formatMoney(b.limit_cents), b.category))}
+          </Card>
+        </>
+      ) : null}
+
+      {debts.length > 0 ? (
+        <>
+          <SectionTitle>Debts</SectionTitle>
+          <Card style={{ gap: space.md }}>
+            {debts.map((d, i) =>
+              line(d.person, `${d.direction === 'owed_to_me' ? 'Owes you' : 'You owe'}${d.note ? ` · ${d.note}` : ''}`, formatMoney(d.amount_cents), `d${i}`),
+            )}
+          </Card>
+        </>
+      ) : null}
+
+      <View style={{ marginTop: space.lg, gap: space.sm }}>
+        <Button label={nothing ? 'Nothing new to add' : 'Add to the app'} icon="checkmark" onPress={onImport} disabled={busy || nothing} />
+        <Button label="Cancel" variant="secondary" onPress={onCancel} />
+      </View>
+    </>
   );
 }
 

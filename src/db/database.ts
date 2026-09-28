@@ -6,16 +6,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget } from './types';
+import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, Debt } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency, Debt, DebtDirection } from './types';
 
 /** Handle passed to every function; on web this is unused. */
 export type Db = SQLiteDatabase;
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 export async function migrate(db: Db): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -83,6 +83,19 @@ export async function migrate(db: Db): Promise<void> {
   if (version < 3) {
     // Accounts get a type so savings can be shown separately
     await db.execAsync("ALTER TABLE accounts ADD COLUMN type TEXT NOT NULL DEFAULT 'current'");
+  }
+
+  if (version < 4) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS debts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        person TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        amount_cents INTEGER NOT NULL,
+        note TEXT,
+        updated_at TEXT NOT NULL
+      );
+    `);
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -279,7 +292,7 @@ export async function deleteImport(db: Db, importId: number): Promise<void> {
 
 export async function deleteAllData(db: Db): Promise<void> {
   await db.execAsync(
-    'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM accounts; DELETE FROM plans; DELETE FROM budgets;',
+    'DELETE FROM transactions; DELETE FROM imports; DELETE FROM rules; DELETE FROM accounts; DELETE FROM plans; DELETE FROM budgets; DELETE FROM debts;',
   );
 }
 
@@ -344,4 +357,31 @@ export async function setBudget(db: Db, category: string, limitCents: number | n
   } else {
     await db.runAsync('INSERT OR REPLACE INTO budgets (category, limit_cents) VALUES (?, ?)', [category, limitCents]);
   }
+}
+
+// ---------- Debts ----------
+
+export async function getDebts(db: Db): Promise<Debt[]> {
+  return db.getAllAsync<Debt>('SELECT * FROM debts ORDER BY direction, amount_cents DESC');
+}
+
+export async function saveDebt(
+  db: Db,
+  d: { id?: number; person: string; direction: Debt['direction']; amountCents: number; note: string | null },
+): Promise<void> {
+  if (d.id) {
+    await db.runAsync(
+      "UPDATE debts SET person = ?, direction = ?, amount_cents = ?, note = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+      [d.person, d.direction, d.amountCents, d.note, d.id],
+    );
+  } else {
+    await db.runAsync(
+      "INSERT INTO debts (person, direction, amount_cents, note, updated_at) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))",
+      [d.person, d.direction, d.amountCents, d.note],
+    );
+  }
+}
+
+export async function deleteDebt(db: Db, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM debts WHERE id = ?', [id]);
 }

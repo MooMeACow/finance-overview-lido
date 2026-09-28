@@ -62,3 +62,15 @@ export type Plan = {
 
 /** Monthly spending limit for a category */
 export type Budget = { category: string; limit_cents: number };
+
+export type DebtDirection = 'owed_to_me' | 'i_owe';
+
+/** Money someone owes you, or you owe someone. Kept separate from your account total. */
+export type Debt = {
+  id: number;
+  person: string;
+  direction: DebtDirection;
+  amount_cents: number; // what's still open, in your main currency
+  note: string | null; // e.g. the original amount in another currency: "₱30,000"
+  updated_at: string;
+};

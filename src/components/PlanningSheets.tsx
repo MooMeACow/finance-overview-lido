@@ -12,12 +12,16 @@ import { isValidDay, todayString } from '../lib/dates';
 import { getCategory } from '../lib/categories';
 import {
   type Account,
+  type Debt,
+  type DebtDirection,
   type AccountType,
   type Plan,
   type PlanFrequency,
   deleteAccount,
+  deleteDebt,
   deletePlan,
   saveAccount,
+  saveDebt,
   savePlan,
   setBudget,
 } from '../db/database';
@@ -234,6 +238,73 @@ export function PlanSheet({
       ) : null}
       <Button label="Save" onPress={save} />
       {plan ? <Button label="Delete plan" variant="danger" icon="trash-outline" onPress={remove} /> : null}
+    </Sheet>
+  );
+}
+
+// ---------- Debt ----------
+
+/** Add or edit money someone owes you (or you owe). `debt` null = new. */
+export function DebtSheet({ visible, debt, onClose }: { visible: boolean; debt: Debt | null; onClose: () => void }) {
+  const db = useDb();
+  const c = useColors();
+  const { refresh } = useAppState();
+  const [person, setPerson] = useState('');
+  const [direction, setDirection] = useState<DebtDirection>('owed_to_me');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setPerson(debt?.person ?? '');
+      setDirection(debt?.direction ?? 'owed_to_me');
+      setAmount(debt ? centsToInput(debt.amount_cents) : '');
+      setNote(debt?.note ?? '');
+    }
+  }, [visible, debt]);
+
+  const save = async () => {
+    const cents = parseAmount(amount);
+    if (!person.trim()) return notify('Who is it?', 'Enter the name of the person.');
+    if (cents === null || cents <= 0) return notify('Enter the amount still open', 'For example 430.00');
+    await saveDebt(db, { id: debt?.id, person: person.trim(), direction, amountCents: cents, note: note.trim() || null });
+    refresh();
+    onClose();
+  };
+
+  const remove = async () => {
+    if (!debt) return;
+    const settled = debt.direction === 'owed_to_me' ? `${debt.person} has paid you back` : `you've paid ${debt.person} back`;
+    if (!(await confirmAction('Remove debt?', `Remove this when ${settled}.`, 'Remove'))) return;
+    await deleteDebt(db, debt.id);
+    refresh();
+    onClose();
+  };
+
+  return (
+    <Sheet visible={visible} onClose={onClose} title={debt ? 'Edit debt' : 'Add debt'}>
+      <View style={styles.row}>
+        {(['owed_to_me', 'i_owe'] as const).map((d) => (
+          <View key={d} style={{ flex: 1 }}>
+            <Button label={d === 'owed_to_me' ? 'Owes me' : 'I owe'} variant={direction === d ? 'primary' : 'secondary'} onPress={() => setDirection(d)} />
+          </View>
+        ))}
+      </View>
+      <View>
+        <FieldLabel>Person</FieldLabel>
+        <TextInput value={person} onChangeText={setPerson} placeholder="Name" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
+      </View>
+      <View>
+        <FieldLabel>Amount still open</FieldLabel>
+        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.textMuted} style={[inputStyle(c), styles.bigInput]} />
+        <Text style={[styles.hint, { color: c.textSecondary }]}>When part is paid back, lower this amount.</Text>
+      </View>
+      <View>
+        <FieldLabel>Note (optional)</FieldLabel>
+        <TextInput value={note} onChangeText={setNote} placeholder="e.g. ₱30,000 or due in December" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
+      </View>
+      <Button label="Save" onPress={save} />
+      {debt ? <Button label="Paid back · remove" variant="danger" icon="checkmark-done-outline" onPress={remove} /> : null}
     </Sheet>
   );
 }

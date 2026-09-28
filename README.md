@@ -12,6 +12,7 @@ Built with React Native and Expo (SDK 57).
 - **Coming up**: everything planned in the next 30 days.
 - **Plans**: recurring (monthly or yearly) and one-off expenses and income, e.g. rent, salary, a trip.
 - **Monthly budgets** per category, with progress for the current month.
+- **Debts**: money people owe you, or you owe, kept separate from your total and forecast.
 
 **Monthly**
 - Net result, money in vs out, a 6-month chart (tap a month to open it), spending by category with budget progress, and your biggest expenses.
@@ -23,6 +24,7 @@ Built with React Native and Expo (SDK 57).
 - **Own-account transfers aren't counted**: moving money between your own accounts isn't income or spending, so these are imported but left out of totals automatically: Revolut top-ups, Revolut Digital Assets, ING savings (Oranje Spaarrekening) transfers and round-ups, ING investment-account transfers, and ING top-ups to Revolut. You can switch this per transaction ("Leave out of totals").
 - **Imported statements**: a list of every statement you imported (bank, period, number of transactions, counted money in/out). Delete one to remove all its transactions, e.g. to import it again.
 - **Manual entries**.
+- **Plans file**: a small JSON file with plans, budgets and debts that you can import in one go (used to move over an old spreadsheet). The format is described at the top of `src/lib/setupFile.ts`. Importing the same file twice skips what's already there.
 - **Responsive design**: on a computer you get a left sidebar, KPI cards, side-by-side panels, sortable tables, hover tooltips on charts and editing in a side panel; on a phone a compact layout with a bottom tab bar.
 - Blue theme with light and dark mode.
 
@@ -116,6 +118,7 @@ src/lib/dialogs.ts           Confirm/alert dialogs that also work in the browser
 src/lib/categories.ts        Categories and auto-categorization rules
 src/lib/importers.ts         Revolut and generic bank CSV import
 src/lib/forecast.ts          Plan dates, upcoming items and the balance forecast
+src/lib/setupFile.ts         Plans file (plans, budgets, debts) format and import
 src/screens/                 Dashboard, Monthly, Transactions, Import
 src/components/              UI building blocks, charts, tables, sheets/side panels
 src/layout.ts                Breakpoints for the responsive layout
