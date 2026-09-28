@@ -6,16 +6,16 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
+import type { Txn, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget } from './types';
 
 export const DATABASE_NAME = 'finance.db';
 
-export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; on web this is unused. */
 export type Db = SQLiteDatabase;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export async function migrate(db: Db): Promise<void> {
   const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -78,6 +78,11 @@ export async function migrate(db: Db): Promise<void> {
         limit_cents INTEGER NOT NULL
       );
     `);
+  }
+
+  if (version < 3) {
+    // Accounts get a type so savings can be shown separately
+    await db.execAsync("ALTER TABLE accounts ADD COLUMN type TEXT NOT NULL DEFAULT 'current'");
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -286,17 +291,17 @@ export async function getAccounts(db: Db): Promise<Account[]> {
 
 export async function saveAccount(
   db: Db,
-  a: { id?: number; name: string; balanceCents: number; currency: string },
+  a: { id?: number; name: string; type: AccountType; balanceCents: number; currency: string },
 ): Promise<void> {
   if (a.id) {
     await db.runAsync(
-      "UPDATE accounts SET name = ?, balance_cents = ?, currency = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
-      [a.name, a.balanceCents, a.currency, a.id],
+      "UPDATE accounts SET name = ?, type = ?, balance_cents = ?, currency = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
+      [a.name, a.type, a.balanceCents, a.currency, a.id],
     );
   } else {
     await db.runAsync(
-      "INSERT INTO accounts (name, balance_cents, currency, updated_at) VALUES (?, ?, ?, datetime('now', 'localtime'))",
-      [a.name, a.balanceCents, a.currency],
+      "INSERT INTO accounts (name, type, balance_cents, currency, updated_at) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))",
+      [a.name, a.type, a.balanceCents, a.currency],
     );
   }
 }

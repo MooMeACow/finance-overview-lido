@@ -12,6 +12,7 @@ import { isValidDay, todayString } from '../lib/dates';
 import { getCategory } from '../lib/categories';
 import {
   type Account,
+  type AccountType,
   type Plan,
   type PlanFrequency,
   deleteAccount,
@@ -31,11 +32,13 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
   const c = useColors();
   const { refresh, currency } = useAppState();
   const [name, setName] = useState('');
+  const [type, setType] = useState<AccountType>('current');
   const [balance, setBalance] = useState('');
 
   useEffect(() => {
     if (visible) {
       setName(account?.name ?? '');
+      setType(account?.type ?? 'current');
       setBalance(account ? centsToInput(account.balance_cents) : '');
     }
   }, [visible, account]);
@@ -44,7 +47,7 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
     const cents = parseAmount(balance);
     if (!name.trim()) return notify('Name the account', 'For example Revolut, ING or Cash.');
     if (cents === null) return notify('Enter the balance', 'For example 1250.00 (use a minus sign if it is negative).');
-    await saveAccount(db, { id: account?.id, name: name.trim(), balanceCents: cents, currency: account?.currency ?? currency });
+    await saveAccount(db, { id: account?.id, name: name.trim(), type, balanceCents: cents, currency: account?.currency ?? currency });
     refresh();
     onClose();
   };
@@ -62,6 +65,13 @@ export function AccountSheet({ visible, account, onClose }: { visible: boolean; 
       <View>
         <FieldLabel>Name</FieldLabel>
         <TextInput value={name} onChangeText={setName} placeholder="e.g. Revolut" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
+      </View>
+      <View>
+        <FieldLabel>Type</FieldLabel>
+        <View style={styles.chips}>
+          <Chip label="Everyday" icon="card-outline" selected={type === 'current'} onPress={() => setType('current')} />
+          <Chip label="Savings & investments" icon="trending-up-outline" selected={type === 'savings'} onPress={() => setType('savings')} />
+        </View>
       </View>
       <View>
         <FieldLabel>Current balance</FieldLabel>

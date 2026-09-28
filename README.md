@@ -7,7 +7,7 @@ Built with React Native and Expo (SDK 57).
 ## Features
 
 **Dashboard**
-- **Total money** across your accounts (Revolut, savings, cash…). You type in each balance and update it whenever you like.
+- **Three key numbers**: total money across your accounts, how much of it is savings, and your expected balance in 6 months. You type in each account's balance (and whether it's an everyday or a savings/investment account) and update it whenever you like.
 - **Expected balance for the next 6 months**, based on your accounts, planned income and expenses, and budgets. Tap a month to see how it adds up; you're warned if it's expected to drop below zero.
 - **Coming up**: everything planned in the next 30 days.
 - **Plans**: recurring (monthly or yearly) and one-off expenses and income, e.g. rent, salary, a trip.
@@ -126,5 +126,4 @@ test/                        Tests (import, forecast, web storage)
 
 - Totals add up amounts as-is; if you import accounts in different currencies, they are not converted.
 - For Revolut, fees are subtracted from the amount, reverted/declined transactions are skipped, and pending ones are skipped until they complete (import again later to add them).
-- Revolut top-ups count as money in. If they're transfers from your own bank account that you also import, mark one side as "Leave out of totals".
 - Bank-specific formats other than Revolut use the column matching step.

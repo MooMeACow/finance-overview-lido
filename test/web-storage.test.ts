@@ -95,11 +95,11 @@ test('web storage: survives a reload', async () => {
 });
 
 test('web storage: accounts, plans, budgets', async () => {
-  await db.saveAccount(null, { name: 'Revolut', balanceCents: 40952, currency: 'EUR' });
-  await db.saveAccount(null, { name: 'Savings', balanceCents: 100000, currency: 'EUR' });
+  await db.saveAccount(null, { name: 'Revolut', type: 'current', balanceCents: 40952, currency: 'EUR' });
+  await db.saveAccount(null, { name: 'Savings', type: 'savings', balanceCents: 100000, currency: 'EUR' });
   let accounts = await db.getAccounts(null);
-  assert.deepEqual(accounts.map((a) => [a.name, a.balance_cents]), [['Revolut', 40952], ['Savings', 100000]]);
-  await db.saveAccount(null, { id: accounts[0].id, name: 'Revolut', balanceCents: 50000, currency: 'EUR' });
+  assert.deepEqual(accounts.map((a) => [a.name, a.type, a.balance_cents]), [['Revolut', 'current', 40952], ['Savings', 'savings', 100000]]);
+  await db.saveAccount(null, { id: accounts[0].id, name: 'Revolut', type: 'current', balanceCents: 50000, currency: 'EUR' });
   await db.deleteAccount(null, accounts[1].id);
   accounts = await db.getAccounts(null);
   assert.deepEqual(accounts.map((a) => a.balance_cents), [50000]);
@@ -130,8 +130,17 @@ test('web storage: data saved by the previous version still loads', async () => 
   // Force a fresh load from storage by re-importing the module under a new URL
   const fresh = await import('../src/db/database.web.ts?reload=' + Date.now());
   assert.deepEqual(await fresh.getAccounts(null), []);
-  await fresh.saveAccount(null, { name: 'Cash', balanceCents: 2000, currency: 'EUR' });
+  await fresh.saveAccount(null, { name: 'Cash', type: 'current', balanceCents: 2000, currency: 'EUR' });
   assert.equal((await fresh.getAccounts(null))[0].id, 1);
+});
+
+test('web storage: accounts saved before account types load as everyday accounts', async () => {
+  store.set(
+    'finance-overview:v1',
+    JSON.stringify({ transactions: [], imports: [], rules: {}, accounts: [{ id: 1, name: 'ING', balance_cents: 100, currency: 'EUR', updated_at: '2026-09-28 20:00:00' }], plans: [], budgets: [], nextTxnId: 1, nextImportId: 1, nextAccountId: 2, nextPlanId: 1 }),
+  );
+  const fresh = await import('../src/db/database.web.ts?old-accounts=' + Date.now());
+  assert.equal((await fresh.getAccounts(null))[0].type, 'current');
 });
 
 test('web storage: imported statements list with period, counts, delete', async () => {

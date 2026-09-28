@@ -33,10 +33,14 @@ export type ImportSummary = ImportRecord & {
 export type MonthTotals = { month: string; in_cents: number; out_cents: number };
 export type CategoryTotal = { category: string; out_cents: number; count: number };
 
+export type AccountType = 'current' | 'savings';
+
 /** A bank account, savings account, cash, etc. The balance is entered by you. */
 export type Account = {
   id: number;
   name: string;
+  /** 'current' = everyday money; 'savings' = savings and investments */
+  type: AccountType;
   balance_cents: number;
   currency: string;
   updated_at: string;

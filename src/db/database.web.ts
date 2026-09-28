@@ -5,9 +5,9 @@
  */
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
-import type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget } from './types';
+import type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget } from './types';
 
-export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, Plan, Budget, PlanFrequency } from './types';
+export type { Txn, ImportRecord, ImportSummary, MonthTotals, CategoryTotal, Account, AccountType, Plan, Budget, PlanFrequency } from './types';
 
 /** Handle passed to every function; unused on web. */
 export type Db = unknown;
@@ -286,15 +286,16 @@ export async function deleteAllData(_db: Db): Promise<void> {
 // ---------- Accounts, plans, budgets ----------
 
 export async function getAccounts(_db: Db): Promise<Account[]> {
-  return [...load().accounts].sort((a, b) => a.id - b.id);
+  // Accounts saved before account types existed count as everyday accounts
+  return [...load().accounts].map((a) => ({ ...a, type: a.type ?? 'current' })).sort((a, b) => a.id - b.id);
 }
 
 export async function saveAccount(
   _db: Db,
-  a: { id?: number; name: string; balanceCents: number; currency: string },
+  a: { id?: number; name: string; type: AccountType; balanceCents: number; currency: string },
 ): Promise<void> {
   const data = load();
-  const fields = { name: a.name, balance_cents: a.balanceCents, currency: a.currency, updated_at: nowString() };
+  const fields = { name: a.name, type: a.type, balance_cents: a.balanceCents, currency: a.currency, updated_at: nowString() };
   if (a.id) {
     save({ ...data, accounts: data.accounts.map((x) => (x.id === a.id ? { ...x, ...fields } : x)) });
   } else {

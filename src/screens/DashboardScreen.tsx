@@ -17,12 +17,10 @@ import {
   type Account,
   type Budget,
   type CategoryTotal,
-  type MonthTotals,
   type Plan,
   getAccounts,
   getBudgets,
   getCategoryTotals,
-  getMonthTotals,
   getPlans,
 } from '../db/database';
 
@@ -38,7 +36,6 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const [plans, setPlans] = useState<Plan[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [spent, setSpent] = useState<CategoryTotal[]>([]);
-  const [month, setMonthTotals] = useState<MonthTotals>({ month: thisMonth, in_cents: 0, out_cents: 0 });
   const [selectedForecast, setSelectedForecast] = useState(thisMonth);
 
   // Sheets
@@ -49,19 +46,17 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   useEffect(() => {
     let alive = true;
     (async () => {
-      const [a, p, b, s, m] = await Promise.all([
+      const [a, p, b, s] = await Promise.all([
         getAccounts(db),
         getPlans(db),
         getBudgets(db),
         getCategoryTotals(db, thisMonth),
-        getMonthTotals(db, thisMonth, 1),
       ]);
       if (!alive) return;
       setAccounts(a);
       setPlans(p);
       setBudgets(b);
       setSpent(s);
-      setMonthTotals(m[0]);
     })();
     return () => {
       alive = false;
@@ -70,6 +65,8 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
 
   const spentMap = useMemo(() => new Map(spent.map((s) => [s.category, s.out_cents])), [spent]);
   const total = accounts.reduce((s, a) => s + a.balance_cents, 0);
+  const savingsAccounts = accounts.filter((a) => a.type === 'savings');
+  const savings = savingsAccounts.reduce((s, a) => s + a.balance_cents, 0);
   const forecast = useMemo(
     () => buildForecast({ startBalanceCents: total, plans, budgets, spentThisMonth: spentMap, today, months: 6 }),
     [total, plans, budgets, spentMap, today],
@@ -145,11 +142,13 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
           {accounts.map((a, i) => (
             <HoverRow key={a.id} onPress={() => setAccountSheet({ open: true, account: a })} first={i === 0}>
               <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
-                <Ionicons name="wallet-outline" size={16} color={c.primary} />
+                <Ionicons name={a.type === 'savings' ? 'trending-up-outline' : 'wallet-outline'} size={16} color={c.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{a.name}</Text>
-                <Text style={[styles.rowSub, { color: c.textMuted }]}>Updated {a.updated_at.slice(0, 10)}</Text>
+                <Text style={[styles.rowSub, { color: c.textMuted }]}>
+                  {a.type === 'savings' ? 'Savings' : 'Everyday'} · updated {a.updated_at.slice(0, 10)}
+                </Text>
               </View>
               <Text style={[styles.amount, { color: c.text }]}>{formatMoney(a.balance_cents, a.currency)}</Text>
             </HoverRow>
@@ -267,27 +266,38 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
         subtitle={isWide ? `Your money at a glance · ${dayLabel(today)}` : undefined}
       />
 
-      {isWide ? (
-        <KpiRow>
-          <KpiCard tone="hero" icon="wallet-outline" label="Total money" value={formatMoney(total, currency)} hint={`${accounts.length} account${accounts.length === 1 ? '' : 's'}`} />
-          <KpiCard swatch={c.seriesIn} label={`Money in · ${monthLabel(thisMonth, true)}`} value={formatMoney(month.in_cents, currency)} hint="From transactions" />
-          <KpiCard swatch={c.seriesOut} label={`Money out · ${monthLabel(thisMonth, true)}`} value={formatMoney(month.out_cents, currency)} hint="From transactions" />
-          <KpiCard
-            icon="trending-up-outline"
-            label="Expected in 6 months"
-            value={formatMoney(lastForecast.end_balance_cents, currency)}
-            hint={`End of ${monthLabel(lastForecast.month)}`}
-          />
-        </KpiRow>
-      ) : (
-        <>
-          <MobileHero accounts={accounts} total={total} currency={currency} onEdit={(a) => setAccountSheet({ open: true, account: a })} />
-          <KpiRow>
-            <KpiCard swatch={c.seriesIn} label="Money in" value={formatMoney(month.in_cents, currency)} hint={monthLabel(thisMonth)} />
-            <KpiCard swatch={c.seriesOut} label="Money out" value={formatMoney(month.out_cents, currency)} hint={monthLabel(thisMonth)} />
-          </KpiRow>
-        </>
+      {isWide ? null : (
+        <MobileHero accounts={accounts} total={total} currency={currency} onEdit={(a) => setAccountSheet({ open: true, account: a })} />
       )}
+      <KpiRow>
+        {isWide ? (
+          <KpiCard
+            tone="hero"
+            icon="wallet-outline"
+            label="Total money"
+            value={formatMoney(total, currency)}
+            hint={`${accounts.length} account${accounts.length === 1 ? '' : 's'}`}
+          />
+        ) : null}
+        <KpiCard
+          icon="trending-up-outline"
+          label="Savings"
+          value={formatMoney(savings, currency)}
+          hint={
+            savingsAccounts.length === 0
+              ? 'Mark an account as savings'
+              : total > 0
+                ? `${Math.round((savings / total) * 100)}% of your money`
+                : `${savingsAccounts.length} account${savingsAccounts.length === 1 ? '' : 's'}`
+          }
+        />
+        <KpiCard
+          icon="calendar-outline"
+          label="Expected in 6 months"
+          value={formatMoney(lastForecast.end_balance_cents, currency)}
+          hint={`End of ${monthLabel(lastForecast.month)}`}
+        />
+      </KpiRow>
 
       <Pressable onPress={openMonthly} accessibilityRole="link" style={styles.link}>
         <Text style={{ color: c.primary, fontSize: 13, fontWeight: '600' }}>Open monthly overview</Text>
