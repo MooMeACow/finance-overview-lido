@@ -22,6 +22,7 @@ Built with React Native and Expo (SDK 57).
 - **Categories that learn**: when you change a category, you can apply it to all transactions with the same description, and future imports remember it.
 - **Leave out of totals**: mark transfers between your own accounts so they aren't counted as income or spending.
 - **Manual entries** and **undo an import**.
+- **Responsive design**: on a computer you get a left sidebar, KPI cards, side-by-side panels, sortable tables, hover tooltips on charts and editing in a side panel; on a phone a compact layout with a bottom tab bar.
 - Blue theme with light and dark mode.
 
 ### How the forecast works
@@ -111,7 +112,8 @@ src/lib/categories.ts        Categories and auto-categorization rules
 src/lib/importers.ts         Revolut and generic bank CSV import
 src/lib/forecast.ts          Plan dates, upcoming items and the balance forecast
 src/screens/                 Dashboard, Monthly, Transactions, Import
-src/components/              UI building blocks, chart, sheets
+src/components/              UI building blocks, charts, tables, sheets/side panels
+src/layout.ts                Breakpoints for the responsive layout
 test/                        Tests (import, forecast, web storage)
 ```
 

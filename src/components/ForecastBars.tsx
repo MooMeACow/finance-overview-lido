@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -6,8 +6,8 @@ import { space, useColors } from '../theme';
 import { monthLabel } from '../lib/dates';
 import { formatMoney, formatMoneyShort } from '../lib/money';
 import type { ForecastMonth } from '../lib/forecast';
+import { ChartTooltip } from './ChartTooltip';
 
-const HEIGHT = 110;
 
 /**
  * Expected balance at the end of each month. One series, so no legend; the
@@ -19,13 +19,17 @@ export function ForecastBars({
   currency,
   selected,
   onSelect,
+  height: HEIGHT = 110,
 }: {
   rows: ForecastMonth[];
   currency: string;
   selected: string;
   onSelect: (month: string) => void;
+  height?: number;
 }) {
   const c = useColors();
+  const [hovered, setHovered] = useState<string | null>(null);
+  const barWidth = HEIGHT > 150 ? 28 : 18;
   const values = rows.map((r) => r.end_balance_cents);
   const maxPos = Math.max(0, ...values);
   const maxNeg = Math.max(0, ...values.map((v) => -v));
@@ -37,29 +41,44 @@ export function ForecastBars({
   return (
     <View>
       <View style={styles.plot}>
-        {rows.map((r) => {
+        {rows.map((r, i) => {
           const isSel = r.month === selected;
+          const isHover = hovered === r.month;
           const v = r.end_balance_cents;
           return (
             <Pressable
               key={r.month}
               onPress={() => onSelect(r.month)}
+              onHoverIn={() => setHovered(r.month)}
+              onHoverOut={() => setHovered((h) => (h === r.month ? null : h))}
               accessibilityRole="button"
               accessibilityLabel={`${monthLabel(r.month)}: expected balance ${formatMoney(v, currency)}`}
-              style={[styles.group, isSel && { backgroundColor: c.accentSoft }]}
+              style={[styles.group, (isSel || isHover) && { backgroundColor: c.accentSoft }, isHover && { zIndex: 5 }]}
             >
+              {isHover ? (
+                <ChartTooltip
+                  title={monthLabel(r.month)}
+                  align={i === 0 ? 'left' : i === rows.length - 1 ? 'right' : 'center'}
+                  lines={[
+                    { label: 'Planned income', value: formatMoney(r.income_cents, currency) },
+                    { label: 'Planned expenses', value: formatMoney(-r.expense_cents, currency) },
+                    { label: 'Budgets', value: formatMoney(-r.budget_cents, currency) },
+                    { label: 'End balance', value: formatMoney(v, currency), swatch: c.seriesIn, strong: true },
+                  ]}
+                />
+              ) : null}
               <Text style={[styles.valueLabel, { color: isSel ? c.text : c.textMuted, fontWeight: isSel ? '700' : '400' }]} numberOfLines={1}>
                 {v < 0 ? '−' : ''}
                 {formatMoneyShort(v, currency)}
               </Text>
               {/* Positive area */}
               <View style={[styles.area, { height: posHeight, justifyContent: 'flex-end' }]}>
-                {v > 0 ? <View style={[styles.bar, styles.barUp, { height: h(v), backgroundColor: c.seriesIn, opacity: isSel ? 1 : 0.6 }]} /> : null}
+                {v > 0 ? <View style={[styles.bar, styles.barUp, { width: barWidth, height: h(v), backgroundColor: c.seriesIn, opacity: isSel || isHover ? 1 : 0.6 }]} /> : null}
               </View>
               <View style={[styles.baseline, { backgroundColor: c.baseline }]} />
               {/* Negative area */}
               <View style={[styles.area, { height: negHeight }]}>
-                {v < 0 ? <View style={[styles.bar, styles.barDown, { height: h(v), backgroundColor: c.seriesIn, opacity: isSel ? 1 : 0.6 }]} /> : null}
+                {v < 0 ? <View style={[styles.bar, styles.barDown, { width: barWidth, height: h(v), backgroundColor: c.seriesIn, opacity: isSel || isHover ? 1 : 0.6 }]} /> : null}
               </View>
             </Pressable>
           );
@@ -93,7 +112,7 @@ const styles = StyleSheet.create({
   valueLabel: { fontSize: 11, marginBottom: 4, fontVariant: ['tabular-nums'] },
   area: { width: '100%', alignItems: 'center' },
   baseline: { height: StyleSheet.hairlineWidth * 2, width: '100%' },
-  bar: { width: 18 },
+  bar: {},
   barUp: { borderTopLeftRadius: 4, borderTopRightRadius: 4 },
   barDown: { borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
   axis: { flexDirection: 'row', marginTop: 6 },

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useDb } from '../db/provider';
 
-import { Button, Card, EmptyState, MonthSwitcher, ScreenHeader, SectionTitle, type IconName } from '../components/ui';
+import { Button, Card, Columns, EmptyState, KpiCard, KpiRow, MonthSwitcher, Page, Panel, ScreenHeader, type IconName } from '../components/ui';
+import { useLayout } from '../layout';
 import { MonthlyBars } from '../components/MonthlyBars';
 import { TransactionRow } from '../components/TransactionRow';
 import { EditTransactionSheet } from '../components/TransactionSheets';
@@ -27,6 +28,7 @@ export function MonthlyScreen({ onImport, onShowCategory }: { onImport: () => vo
   const db = useDb();
   const c = useColors();
   const { month, setMonth, currency, version } = useAppState();
+  const { isWide } = useLayout();
   const [history, setHistory] = useState<MonthTotals[]>([]);
   const [categories, setCategories] = useState<CategoryTotal[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -71,23 +73,96 @@ export function MonthlyScreen({ onImport, onShowCategory }: { onImport: () => vo
     ...budgets.filter((b) => !categories.some((x) => x.category === b.category)).map((b) => ({ category: b.category, out_cents: 0, count: 0 })),
   ];
 
-  return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <ScreenHeader title="Monthly" />
-      <MonthSwitcher month={month} onChange={setMonth} />
+  const savedShare = current.in_cents > 0 ? Math.round((net / current.in_cents) * 100) : null;
 
-      <View style={[styles.hero, { backgroundColor: c.hero }]}>
-        <Text style={[styles.heroLabel, { color: c.heroMuted }]}>Net for {monthLabel(month)}</Text>
-        <Text style={[styles.heroValue, { color: c.heroText }]}>{formatMoney(net, currency, 'always')}</Text>
-        <View style={styles.stats}>
-          <Stat label="Money in" value={formatMoney(current.in_cents, currency)} />
-          <View style={[styles.divider, { backgroundColor: c.heroPill }]} />
-          <Stat label="Money out" value={formatMoney(current.out_cents, currency)} />
+  const categoryList =
+    rows.length === 0 ? (
+      <Text style={[styles.muted, { color: c.textSecondary }]}>No spending this month.</Text>
+    ) : (
+      rows.map((cat) => {
+        const info = getCategory(cat.category);
+        const share = totalOut ? cat.out_cents / totalOut : 0;
+        const limit = budgetMap.get(cat.category);
+        const over = limit !== undefined && cat.out_cents > limit;
+        const fillPct = limit ? Math.min(1, cat.out_cents / limit) * 100 : Math.max(2, share * 100);
+        return (
+          <Pressable
+            key={cat.category}
+            onPress={() => onShowCategory(cat.category)}
+            accessibilityRole="button"
+            accessibilityLabel={`${info.label}: ${formatMoney(cat.out_cents, currency)}, ${Math.round(share * 100)} percent`}
+            style={(state) => [
+              styles.catRow,
+              (state as { hovered?: boolean }).hovered && { backgroundColor: c.track },
+              state.pressed && { opacity: 0.6 },
+            ]}
+          >
+            <View style={styles.catTop}>
+              <Ionicons name={info.icon as IconName} size={16} color={c.textSecondary} />
+              <Text style={[styles.catName, { color: c.text }]}>{info.label}</Text>
+              {limit === undefined ? <Text style={[styles.catPct, { color: c.textMuted }]}>{Math.round(share * 100)}%</Text> : null}
+              <Text style={[styles.catValue, { color: c.text }]}>
+                {formatMoney(cat.out_cents, currency)}
+                {limit !== undefined ? <Text style={{ color: c.textMuted, fontWeight: '400' }}> / {formatMoney(limit, currency)}</Text> : null}
+              </Text>
+            </View>
+            <View style={[styles.track, { backgroundColor: c.track }]}>
+              <View
+                style={[
+                  styles.fill,
+                  {
+                    width: `${fillPct}%` as `${number}%`,
+                    backgroundColor: limit === undefined ? c.seriesOut : over ? c.danger : c.primary,
+                  },
+                ]}
+              />
+            </View>
+            {over ? (
+              <View style={styles.catTop}>
+                <Ionicons name="alert-circle" size={14} color={c.danger} />
+                <Text style={{ color: c.text, fontSize: 12 }}>Over budget by {formatMoney(cat.out_cents - limit!, currency)}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })
+    );
+
+  return (
+    <Page>
+      <ScreenHeader
+        title="Monthly"
+        subtitle={isWide ? 'Where your money came from and went' : undefined}
+        right={isWide ? <MonthSwitcher month={month} onChange={setMonth} /> : undefined}
+      />
+      {!isWide ? <MonthSwitcher month={month} onChange={setMonth} /> : null}
+
+      {isWide ? (
+        <KpiRow>
+          <KpiCard tone="hero" label={`Net · ${monthLabel(month)}`} value={formatMoney(net, currency, 'always')} hint="Money in minus money out" />
+          <KpiCard swatch={c.seriesIn} label="Money in" value={formatMoney(current.in_cents, currency)} />
+          <KpiCard swatch={c.seriesOut} label="Money out" value={formatMoney(current.out_cents, currency)} />
+          <KpiCard
+            icon="pie-chart-outline"
+            label="Kept of income"
+            value={savedShare === null ? '—' : `${savedShare}%`}
+            hint={savedShare === null ? 'No income this month' : 'Net as a share of money in'}
+          />
+        </KpiRow>
+      ) : (
+        <View style={[styles.hero, { backgroundColor: c.hero }]}>
+          <Text style={[styles.heroLabel, { color: c.heroMuted }]}>Net for {monthLabel(month)}</Text>
+          <Text style={[styles.heroValue, { color: c.heroText }]}>{formatMoney(net, currency, 'always')}</Text>
+          <View style={styles.stats}>
+            <Stat label="Money in" value={formatMoney(current.in_cents, currency)} />
+            <View style={[styles.divider, { backgroundColor: c.heroPill }]} />
+            <Stat label="Money out" value={formatMoney(current.out_cents, currency)} />
+          </View>
         </View>
-      </View>
+      )}
 
       {loaded && !hasAnyData ? (
-        <Card style={{ marginTop: space.lg }}>
+        <Card>
           <EmptyState
             icon="document-text-outline"
             title="No transactions yet"
@@ -99,79 +174,29 @@ export function MonthlyScreen({ onImport, onShowCategory }: { onImport: () => vo
 
       {hasAnyData ? (
         <>
-          <SectionTitle>Last 6 months</SectionTitle>
-          <Card>
-            <MonthlyBars data={history} selected={month} currency={currency} onSelect={setMonth} />
-          </Card>
-
-          <SectionTitle>Spending by category</SectionTitle>
-          <Card style={{ paddingVertical: space.sm }}>
-            {rows.length === 0 ? (
-              <Text style={[styles.muted, { color: c.textSecondary }]}>No spending this month.</Text>
-            ) : (
-              rows.map((cat) => {
-                const info = getCategory(cat.category);
-                const share = totalOut ? cat.out_cents / totalOut : 0;
-                const limit = budgetMap.get(cat.category);
-                const over = limit !== undefined && cat.out_cents > limit;
-                const fillPct = limit ? Math.min(1, cat.out_cents / limit) * 100 : Math.max(2, share * 100);
-                return (
-                  <Pressable
-                    key={cat.category}
-                    onPress={() => onShowCategory(cat.category)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${info.label}: ${formatMoney(cat.out_cents, currency)}, ${Math.round(share * 100)} percent`}
-                    style={({ pressed }) => [styles.catRow, pressed && { opacity: 0.6 }]}
-                  >
-                    <View style={styles.catTop}>
-                      <Ionicons name={info.icon as IconName} size={16} color={c.textSecondary} />
-                      <Text style={[styles.catName, { color: c.text }]}>{info.label}</Text>
-                      {limit === undefined ? (
-                        <Text style={[styles.catPct, { color: c.textMuted }]}>{Math.round(share * 100)}%</Text>
-                      ) : null}
-                      <Text style={[styles.catValue, { color: c.text }]}>
-                        {formatMoney(cat.out_cents, currency)}
-                        {limit !== undefined ? <Text style={{ color: c.textMuted, fontWeight: '400' }}> / {formatMoney(limit, currency)}</Text> : null}
-                      </Text>
-                    </View>
-                    <View style={[styles.track, { backgroundColor: c.track }]}>
-                      <View
-                        style={[
-                          styles.fill,
-                          {
-                            width: `${fillPct}%` as `${number}%`,
-                            backgroundColor: limit === undefined ? c.seriesOut : over ? c.danger : c.primary,
-                          },
-                        ]}
-                      />
-                    </View>
-                    {over ? (
-                      <View style={styles.catTop}>
-                        <Ionicons name="alert-circle" size={14} color={c.danger} />
-                        <Text style={{ color: c.text, fontSize: 12 }}>Over budget by {formatMoney(cat.out_cents - limit!, currency)}</Text>
-                      </View>
-                    ) : null}
-                  </Pressable>
-                );
-              })
-            )}
-          </Card>
+          <Columns weights={[3, 2]} breakpoint="wide">
+            <Panel title="Last 6 months" style={{ flex: 1 }}>
+              <MonthlyBars data={history} selected={month} currency={currency} onSelect={setMonth} height={isWide ? 220 : 120} />
+            </Panel>
+            <Panel title="Spending by category" style={{ flex: 1 }}>
+              <View>{categoryList}</View>
+            </Panel>
+          </Columns>
 
           {biggest.length > 0 ? (
-            <>
-              <SectionTitle>Biggest expenses</SectionTitle>
-              <Card style={{ paddingVertical: space.xs, paddingHorizontal: space.sm }}>
+            <Panel title="Biggest expenses">
+              <View>
                 {biggest.map((t) => (
                   <TransactionRow key={t.id} txn={t} onPress={() => setEditing(t)} />
                 ))}
-              </Card>
-            </>
+              </View>
+            </Panel>
           ) : null}
         </>
       ) : null}
 
       <EditTransactionSheet txn={editing} onClose={() => setEditing(null)} />
-    </ScrollView>
+    </Page>
   );
 }
 
@@ -186,8 +211,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.lg, paddingBottom: 120 },
-  hero: { marginTop: space.lg, gap: space.xs, borderRadius: 20, padding: space.xl },
+  hero: { gap: space.xs, borderRadius: 20, padding: space.xl },
   heroLabel: { fontSize: 14 },
   heroValue: { fontSize: 40, fontWeight: '700', letterSpacing: -1 },
   stats: { flexDirection: 'row', marginTop: space.lg, alignItems: 'stretch' },
@@ -196,7 +220,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '600' },
   divider: { width: StyleSheet.hairlineWidth, marginHorizontal: space.lg },
   muted: { fontSize: 15, paddingVertical: space.md },
-  catRow: { paddingVertical: space.md, gap: space.sm },
+  catRow: { paddingVertical: space.md, paddingHorizontal: space.xs, gap: space.sm, borderRadius: 8 },
   catTop: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   catName: { flex: 1, fontSize: 15 },
   catPct: { fontSize: 13, fontVariant: ['tabular-nums'] },

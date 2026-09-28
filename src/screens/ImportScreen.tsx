@@ -5,7 +5,8 @@ import { useDb } from '../db/provider';
 import { confirmAction, notify } from '../lib/dialogs';
 import { readPickedFile } from '../lib/readPickedFile';
 
-import { Button, Card, Chip, FieldLabel, IconButton, ScreenHeader, SectionTitle, inputStyle } from '../components/ui';
+import { Button, Card, Chip, FieldLabel, IconButton, Page, ScreenHeader, SectionTitle, inputStyle } from '../components/ui';
+import { useLayout } from '../layout';
 import { space, useColors } from '../theme';
 import { useAppState } from '../state';
 import { type Table, toTable } from '../lib/csv';
@@ -36,6 +37,7 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const db = useDb();
   const c = useColors();
   const { refresh, setMonth, version } = useAppState();
+  const { isWide } = useLayout();
 
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [mapping, setMapping] = useState<Mapping | null>(null);
@@ -147,8 +149,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   }, [result]);
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <ScreenHeader title="Import" />
+    <Page>
+      <ScreenHeader title="Import" subtitle={isWide ? 'Add bank statements and manage your data' : undefined} />
+      <View style={isWide ? styles.readable : undefined}>
 
       {!loaded ? (
         <Card style={{ gap: space.md }}>
@@ -259,7 +262,8 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
           </Card>
         </>
       ) : null}
-    </ScrollView>
+      </View>
+    </Page>
   );
 }
 
@@ -348,7 +352,7 @@ function MappingEditor({ table, mapping, onChange }: { table: Table; mapping: Ma
 }
 
 const styles = StyleSheet.create({
-  content: { padding: space.lg, paddingBottom: 120 },
+  readable: { maxWidth: 760 },
   lead: { fontSize: 17, fontWeight: '600' },
   body: { fontSize: 15, lineHeight: 21 },
   small: { fontSize: 13 },
