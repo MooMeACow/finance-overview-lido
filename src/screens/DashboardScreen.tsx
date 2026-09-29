@@ -406,20 +406,26 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
         </Columns>
       </View>
 
-      <AccountSheet visible={accountSheet.open} account={accountSheet.account} onClose={() => setAccountSheet({ open: false, account: null })} />
+      <AccountSheet
+        visible={accountSheet.open}
+        account={accountSheet.account}
+        largestCents={Math.max(0, ...accounts.map((a) => a.balance_cents))}
+        onClose={() => setAccountSheet((s) => ({ ...s, open: false }))}
+      />
       <PlanSheet
         visible={planSheet.open}
         plan={planSheet.plan}
         defaultKind={planSheet.kind}
-        onClose={() => setPlanSheet((s) => ({ ...s, open: false, plan: null }))}
+        onClose={() => setPlanSheet((s) => ({ ...s, open: false }))}
       />
-      <DebtSheet visible={debtSheet.open} debt={debtSheet.debt} onClose={() => setDebtSheet({ open: false, debt: null })} />
+      <DebtSheet visible={debtSheet.open} debt={debtSheet.debt} onClose={() => setDebtSheet((s) => ({ ...s, open: false }))} />
       <BudgetSheet
         visible={budgetSheet.open}
         category={budgetSheet.budget?.category ?? null}
         limitCents={budgetSheet.budget?.limit_cents ?? null}
         spentCents={budgetSheet.budget ? spentMap.get(budgetSheet.budget.category) ?? 0 : 0}
-        onClose={() => setBudgetSheet({ open: false, budget: null })}
+        spentByCategory={spentMap}
+        onClose={() => setBudgetSheet((s) => ({ ...s, open: false }))}
       />
     </Page>
   );

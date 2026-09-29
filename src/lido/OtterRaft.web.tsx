@@ -130,6 +130,13 @@ export function OtterRaft({
       cancelAnimationFrame(frame);
     };
 
+    const offCheer = raftBus.onCheer((id) => {
+      const o = raft.otters.find((x) => x.spec.id === id);
+      if (!o) return;
+      raft.cheer(o, performance.now() / 1000);
+      pool.ripple(o.x, o.wl, 1);
+    });
+
     const onClick = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -159,6 +166,7 @@ export function OtterRaft({
     return () => {
       pause();
       setCursor(false);
+      offCheer();
       window.removeEventListener('click', onClick);
       document.removeEventListener('visibilitychange', onVisibility);
       ro.disconnect();

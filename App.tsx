@@ -28,6 +28,7 @@ import { SyncBanner, SyncSheet, syncLabel } from './src/components/SyncControls'
 import { useSyncState } from './src/sync/useSync';
 import { Backdrop } from './src/lido/Backdrop';
 import { DialogHost } from './src/lido/DialogHost';
+import { ToastHost } from './src/lido/ToastHost';
 import { Icon } from './src/lido/Icon';
 import { OtterPortrait } from './src/lido/OtterPortrait';
 import { isWeb, transition, web } from './src/lido/web';
@@ -135,6 +136,7 @@ function Main() {
         <SyncBanner onOpen={() => setSyncOpen(true)} />
       </View>
       <SyncSheet visible={syncOpen} onClose={() => setSyncOpen(false)} />
+      <ToastHost />
       <DialogHost />
     </View>
   );

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Switch, TextInput, View } from 'react-native';
 
-import { Button, FieldLabel, Press, Sheet, inputStyle, type IconName } from './ui';
+import { Button, FieldLabel, Press, inputStyle, type IconName } from './ui';
+import { HoldButton, Sheet, SheetFooter } from './Sheet';
 import { radius, shadow, space, type as T, useColors } from '../theme';
 import { Text } from '../lido/Text';
 import { Icon } from '../lido/Icon';

@@ -1,12 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useDb } from '../db/provider';
-import { confirmAction, notify } from '../lib/dialogs';
+import { notify } from '../lib/dialogs';
+import { toast } from '../lib/toast';
 
-import { Button, FieldLabel, Money, Sheet, inputStyle, Segmented, Text } from './ui';
+import { Button, FieldLabel, inputStyle, Segmented, Text } from './ui';
+import { HoldButton, Sheet, SheetFooter } from './Sheet';
+import { AmountField } from './fields';
+import { DateField } from './DateField';
 import { CategoryPicker } from './CategoryPicker';
+import { ReceiptPreview } from './SheetPreviews';
 import { space, useColors } from '../theme';
-import { dayLabel, todayString } from '../lib/dates';
+import { dayLabel, isValidDay, todayString } from '../lib/dates';
 import { parseAmount } from '../lib/money';
 import {
   type Txn,
@@ -26,6 +31,10 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
   const [note, setNote] = useState('');
   const [excluded, setExcluded] = useState(false);
   const [applyAll, setApplyAll] = useState(true);
+  // Keep showing the last transaction while the card animates out
+  const last = useRef<Txn | null>(txn);
+  if (txn) last.current = txn;
+  const shown = txn ?? last.current;
 
   useEffect(() => {
     if (txn) {
@@ -36,40 +45,55 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
     }
   }, [txn]);
 
-  if (!txn) return null;
+  if (!shown) return null;
 
   const save = async () => {
-    await updateTransaction(db, txn.id, { category, note: note.trim() || null, excluded });
-    if (applyAll && category !== txn.category) {
-      await applyCategoryToSimilar(db, txn.description, category);
-    }
+    await updateTransaction(db, shown.id, { category, note: note.trim() || null, excluded });
+    let similar = 0;
+    if (applyAll && category !== shown.category) similar = await applyCategoryToSimilar(db, shown.description, category);
     refresh();
     onClose();
+    toast(similar > 1 ? `Saved, and ${similar - 1} more like it` : 'Transaction saved');
   };
 
   const remove = async () => {
-    if (!(await confirmAction('Delete transaction?', 'This cannot be undone.', 'Delete'))) return;
-    await deleteTransaction(db, txn.id);
+    await deleteTransaction(db, shown.id);
     refresh();
     onClose();
+    toast('Transaction deleted', 'removed');
   };
 
   return (
-    <Sheet visible onClose={onClose} title="Transaction">
-      <View style={styles.summary}>
-        <Text style={[styles.desc, { color: c.text }]}>{txn.description}</Text>
-        <Text style={{ color: c.textSecondary }}>{dayLabel(txn.date)}</Text>
-        <Money cents={txn.amount_cents} currency={txn.currency} style={styles.bigAmount} />
-      </View>
-
+    <Sheet
+      visible={!!txn}
+      onClose={onClose}
+      title="Transaction"
+      subtitle={dayLabel(shown.date)}
+      preview={
+        <ReceiptPreview
+          description={shown.description}
+          date={shown.date}
+          amountCents={shown.amount_cents}
+          currency={shown.currency}
+          category={category}
+          note={note}
+          excluded={excluded}
+        />
+      }
+      footer={
+        <SheetFooter>
+          <HoldButton label="Hold to delete" onConfirm={remove} />
+          <View style={{ flex: 1 }} />
+          <Button label="Save" icon="checkmark" onPress={save} />
+        </SheetFooter>
+      }
+    >
       <View>
         <FieldLabel>Category</FieldLabel>
         <CategoryPicker value={category} onChange={setCategory} />
-        {category !== txn.category ? (
-          <View style={styles.switchRow}>
-            <Text style={[styles.switchLabel, { color: c.text }]}>
-              Use for all “{txn.description}” transactions, now and in future imports
-            </Text>
+        {category !== shown.category ? (
+          <View style={[styles.switchRow, { backgroundColor: c.cardSunk }]}>
+            <Text style={[styles.switchLabel, { color: c.text }]}>Use for all “{shown.description}” transactions, now and in future imports</Text>
             <Switch value={applyAll} onValueChange={setApplyAll} trackColor={{ false: c.baseline, true: c.primary }} thumbColor="#FFFFFF" />
           </View>
         ) : null}
@@ -80,18 +104,13 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
         <TextInput value={note} onChangeText={setNote} placeholder="Optional" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
       </View>
 
-      <View style={styles.switchRow}>
+      <View style={[styles.switchRow, { backgroundColor: c.cardSunk }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.switchLabel, { color: c.text }]}>Leave out of totals</Text>
-          <Text style={{ color: c.textSecondary, fontSize: 13 }}>
-            For moving money between your own accounts, so it isn't counted twice.
-          </Text>
+          <Text style={{ color: c.textSecondary, fontSize: 13, lineHeight: 18 }}>For moving money between your own accounts, so it isn't counted twice.</Text>
         </View>
         <Switch value={excluded} onValueChange={setExcluded} trackColor={{ false: c.baseline, true: c.primary }} thumbColor="#FFFFFF" />
       </View>
-
-      <Button label="Save" onPress={save} />
-      <Button label="Delete transaction" variant="danger" icon="trash-outline" onPress={remove} />
     </Sheet>
   );
 }
@@ -119,17 +138,18 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
     }
   }, [visible]);
 
+  const cents = Math.abs(parseAmount(amount) ?? 0);
+  const signed = direction === 'out' ? -cents : cents;
+
   const save = async () => {
-    const cents = parseAmount(amount);
-    if (cents === null || cents === 0) {
+    if (cents === 0) {
       notify('Enter an amount', 'For example 12.50');
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
-      notify('Check the date', 'Use the format YYYY-MM-DD, for example 2026-09-28');
+    if (!isValidDay(date.trim())) {
+      notify('Pick a date', 'Choose the day the money moved.');
       return;
     }
-    const signed = direction === 'out' ? -Math.abs(cents) : Math.abs(cents);
     await addManualTransaction(db, {
       date: `${date.trim()} 12:00:00`,
       description: description.trim() || (direction === 'out' ? 'Expense' : 'Income'),
@@ -141,10 +161,23 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
     setMonth(date.trim().slice(0, 7));
     refresh();
     onClose();
+    toast('Transaction added');
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title="Add transaction">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="Add transaction"
+      subtitle="For cash and anything not in a statement"
+      preview={<ReceiptPreview description={description} date={date} amountCents={signed} currency={currency} category={category} note={note} />}
+      footer={
+        <SheetFooter>
+          <View style={{ flex: 1 }} />
+          <Button label="Add transaction" icon="add" onPress={save} />
+        </SheetFooter>
+      }
+    >
       <Segmented
         options={[
           { key: 'out' as const, label: 'Money out' },
@@ -159,22 +192,17 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
       />
       <View>
         <FieldLabel>Amount</FieldLabel>
-        <TextInput
-          value={amount}
-          onChangeText={setAmount}
-          keyboardType="decimal-pad"
-          placeholder="0.00"
-          placeholderTextColor={c.textMuted}
-          style={[inputStyle(c), { fontSize: 26, fontFamily: 'BricolageGrotesque_600SemiBold' }]}
-        />
+        <AmountField label="Amount" value={amount} onChange={setAmount} currency={currency} />
       </View>
-      <View>
-        <FieldLabel>Description</FieldLabel>
-        <TextInput value={description} onChangeText={setDescription} placeholder="e.g. Market" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
-      </View>
-      <View>
-        <FieldLabel>Date (YYYY-MM-DD)</FieldLabel>
-        <TextInput value={date} onChangeText={setDate} autoCapitalize="none" style={inputStyle(c)} />
+      <View style={styles.row}>
+        <View style={{ flex: 1.4, minWidth: 180 }}>
+          <FieldLabel>Description</FieldLabel>
+          <TextInput value={description} onChangeText={setDescription} placeholder="e.g. Market" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
+        </View>
+        <View style={{ flex: 1, minWidth: 160 }}>
+          <FieldLabel>Date</FieldLabel>
+          <DateField label="Date" value={date} onChange={setDate} />
+        </View>
       </View>
       <View>
         <FieldLabel>Category</FieldLabel>
@@ -184,16 +212,12 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
         <FieldLabel>Note</FieldLabel>
         <TextInput value={note} onChangeText={setNote} placeholder="Optional" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
       </View>
-      <Button label="Add" onPress={save} />
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  summary: { gap: 4 },
-  desc: { fontSize: 20, lineHeight: 26, fontFamily: 'BricolageGrotesque_600SemiBold' },
-  bigAmount: { fontSize: 34, lineHeight: 40, fontFamily: 'BricolageGrotesque_700Bold', letterSpacing: -0.8, marginTop: space.sm },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md, padding: space.lg, borderRadius: 16 },
   switchLabel: { flex: 1, fontSize: 15, fontFamily: 'Geist_500Medium' },
-  segment: { flexDirection: 'row', gap: space.sm },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
 });

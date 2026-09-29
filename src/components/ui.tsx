@@ -1,8 +1,5 @@
 import React from 'react';
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Pressable,
   type PressableProps,
   ScrollView,
@@ -467,82 +464,6 @@ export function EmptyState({ icon, title, body }: { icon: IconName; title: strin
   );
 }
 
-/** Slide-over panel on desktop, bottom sheet on phones. */
-export function Sheet({
-  visible,
-  onClose,
-  title,
-  children,
-}: {
-  visible: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  const c = useColors();
-  const insets = useSafeAreaInsets();
-  const { isWide } = useLayout();
-  const backdrop = (
-    <Pressable
-      style={[StyleSheet.absoluteFill, { backgroundColor: c.backdrop }, web({ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', cursor: 'default' })]}
-      onPress={onClose}
-      accessibilityLabel="Close panel"
-    />
-  );
-  if (isWide) {
-    return (
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-        <View style={styles.sideWrap}>
-          {backdrop}
-          <View
-            style={[
-              styles.sidePanel,
-              { backgroundColor: c.card },
-              shadow(c, 3),
-              web({
-                animationKeyframes: { '0%': { transform: 'translateX(28px)', opacity: 0 }, '100%': { transform: 'translateX(0px)', opacity: 1 } },
-                animationDuration: `${motion.panel}ms`,
-                animationTimingFunction: motion.easeDrawer,
-                animationFillMode: 'both',
-              }),
-            ]}
-            accessibilityViewIsModal
-          >
-            <View style={[styles.sheetHeader, styles.sidePanelHeader]}>
-              <Text style={[T.title, { fontSize: 24, lineHeight: 30, color: c.text, flex: 1 }]} numberOfLines={1}>
-                {title}
-              </Text>
-              <IconButton icon="close" label="Close" onPress={onClose} />
-            </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sidePanelBody} style={web({ overscrollBehavior: 'contain' })}>
-              {children}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-  return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
-        {backdrop}
-        <View style={[styles.sheet, { backgroundColor: c.card, paddingBottom: insets.bottom + space.lg }, shadow(c, 3)]} accessibilityViewIsModal>
-          <View style={[styles.grabber, { backgroundColor: c.baseline }]} />
-          <View style={styles.sheetHeader}>
-            <Text style={[T.title, { fontSize: 22, color: c.text, flex: 1 }]} numberOfLines={1}>
-              {title}
-            </Text>
-            <IconButton icon="close" label="Close" onPress={onClose} />
-          </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space.lg, paddingBottom: space.sm }} style={web({ overscrollBehavior: 'contain' })}>
-            {children}
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
 export function FieldLabel({ children }: { children: string }) {
   const c = useColors();
   return <Text style={[T.label, { color: c.textSecondary, marginBottom: 8 }]}>{children}</Text>;
@@ -608,10 +529,6 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.lg },
   swatch: { width: 10, height: 10, borderRadius: 3 },
-  sideWrap: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', padding: 12 },
-  sidePanel: { width: 480, maxWidth: '100%', height: '100%', borderRadius: radius.lg, overflow: 'hidden' },
-  sidePanelHeader: { paddingHorizontal: space.xl, paddingTop: space.xl, paddingBottom: space.md },
-  sidePanelBody: { paddingHorizontal: space.xl, paddingBottom: space.xl, gap: space.lg },
   monthSwitcher: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -645,19 +562,4 @@ const styles = StyleSheet.create({
   buttonSm: { height: 36, paddingLeft: 14, paddingRight: 16 },
   smallAction: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingLeft: 10, paddingRight: 12, borderRadius: radius.pill },
   empty: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },
-  sheetWrap: { flex: 1, justifyContent: 'flex-end' },
-  sheet: {
-    borderTopLeftRadius: radius.lg,
-    borderTopRightRadius: radius.lg,
-    paddingHorizontal: space.lg,
-    maxHeight: '92%',
-  },
-  grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 10 },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
-    paddingVertical: space.md,
-  },
 });

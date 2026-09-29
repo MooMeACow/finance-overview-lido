@@ -1,17 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
 
-import { Button, Chip, FieldLabel, Segmented, Sheet, Text, inputStyle } from './ui';
+import { Button, FieldLabel, Segmented, Text, inputStyle } from './ui';
+import { HoldButton, Sheet, SheetFooter } from './Sheet';
+import { AmountField, RadioList } from './fields';
+import { DateField } from './DateField';
 import { CategoryPicker } from './CategoryPicker';
-import { space, useColors } from '../theme';
+import { AccountPreview, BudgetPreview, DebtPreview, PlanPreview } from './SheetPreviews';
+import { space, type as T, useColors } from '../theme';
 import { useDb } from '../db/provider';
 import { useAppState } from '../state';
-import { confirmAction, notify } from '../lib/dialogs';
+import { notify } from '../lib/dialogs';
+import { toast } from '../lib/toast';
 import { parseAmount, formatMoney } from '../lib/money';
 import { isValidDay, todayString } from '../lib/dates';
 import { getCategory } from '../lib/categories';
-import { ACCOUNT_LINKS, type LiveAccount } from '../lib/balances';
+import { ACCOUNT_LINKS, linkLabel, type LiveAccount } from '../lib/balances';
 import { shortDate } from '../lib/dates';
+import { raft } from '../lido/buses';
 import {
   type Account,
   type Debt,
@@ -31,17 +37,31 @@ import {
 
 const centsToInput = (cents: number) => (cents / 100).toFixed(2);
 
+function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+  const c = useColors();
+  return (
+    <View>
+      <FieldLabel>{label}</FieldLabel>
+      {children}
+      {hint ? <Text style={[styles.hint, { color: c.textSecondary }]}>{hint}</Text> : null}
+    </View>
+  );
+}
+
 // ---------- Account ----------
 
 /** Add or edit an account and its current balance. `account` null = new. */
 export function AccountSheet({
   visible,
   account,
+  largestCents = 0,
   onClose,
 }: {
   visible: boolean;
   /** The account as shown, with its up-to-date balance */
   account: (Account & Partial<LiveAccount>) | null;
+  /** The biggest balance in the pool, so the preview's pebble is sized the same way */
+  largestCents?: number;
   onClose: () => void;
 }) {
   const db = useDb();
@@ -77,60 +97,70 @@ export function AccountSheet({
     });
     refresh();
     onClose();
+    toast(account ? `${name.trim()} saved` : `${name.trim()} added`);
+    if (account) setTimeout(() => raft.cheer(account.id), 260);
   };
 
   const remove = async () => {
     if (!account) return;
-    if (!(await confirmAction('Delete account?', `${account.name} will be removed from your total.`, 'Delete'))) return;
     await deleteAccount(db, account.id);
     refresh();
     onClose();
+    toast(`${account.name} deleted`, 'removed');
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={account ? 'Edit account' : 'Add account'}>
-      <View>
-        <FieldLabel>Name</FieldLabel>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={account ? 'Edit account' : 'Add account'}
+      subtitle={account ? (account.link ? `Keeps up with ${linkLabel(account.link)}` : `Balance typed in on ${shortDate(account.updated_at)}`) : 'A bank account, savings or cash'}
+      preview={<AccountPreview id={account?.id ?? null} name={name} type={type} balance={balance} currency={account?.currency ?? currency} largestCents={largestCents} />}
+      footer={
+        <SheetFooter>
+          {account ? <HoldButton label="Hold to delete" onConfirm={remove} /> : null}
+          <View style={{ flex: 1 }} />
+          <Button label={account ? 'Save' : 'Add account'} icon="checkmark" onPress={save} />
+        </SheetFooter>
+      }
+    >
+      <Field label="Name">
         <TextInput value={name} onChangeText={setName} placeholder="e.g. Revolut" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
-      </View>
-      <View>
-        <FieldLabel>Type</FieldLabel>
-        <View style={styles.chips}>
-          <Chip label="Current" icon="card-outline" selected={type === 'current'} onPress={() => setType('current')} />
-          <Chip label="Savings & investments" icon="trending-up-outline" selected={type === 'savings'} onPress={() => setType('savings')} />
-        </View>
-      </View>
-      <View>
-        <FieldLabel>Current balance</FieldLabel>
-        <TextInput
-          value={balance}
-          onChangeText={setBalance}
-          keyboardType="numbers-and-punctuation"
-          placeholder="0.00"
-          placeholderTextColor={c.textMuted}
-          style={[inputStyle(c), styles.bigInput]}
+      </Field>
+      <Field label="Type">
+        <Segmented
+          options={[
+            { key: 'current' as const, label: 'Current' },
+            { key: 'savings' as const, label: 'Savings & investments' },
+          ]}
+          value={type}
+          onChange={setType}
         />
-        <Text style={[styles.hint, { color: c.textSecondary }]}>
-          {account?.change_count
+      </Field>
+      <Field
+        label="Current balance"
+        hint={
+          account?.change_count
             ? `You typed ${formatMoney(account.entered_cents ?? 0)} on ${shortDate(account.updated_at)}; ${account.change_count} imported transaction${account.change_count === 1 ? '' : 's'} since then changed it by ${formatMoney(account.change_cents ?? 0, 'EUR', 'always')}. Change the amount only if it doesn't match your bank app.`
-            : "Check your bank app and type what's there now. Update it whenever you like."}
-        </Text>
-      </View>
-      <View>
-        <FieldLabel>Update automatically from imported statements</FieldLabel>
-        <View style={styles.chips}>
-          {[{ key: null, label: "Don't update automatically", hint: 'Only the balance you type in' }, ...ACCOUNT_LINKS].map((l) => (
-            <Chip key={l.key ?? 'none'} label={l.label} selected={link === l.key} onPress={() => setLink(l.key as AccountLink | null)} />
-          ))}
-        </View>
-        <Text style={[styles.hint, { color: c.textSecondary }]}>
-          {link
-            ? `${ACCOUNT_LINKS.find((l) => l.key === link)!.hint} dated after the day you last typed in the balance are added to it.`
-            : 'Pick the statements that belong to this account to keep its balance up to date when you import them.'}
-        </Text>
-      </View>
-      <Button label="Save" onPress={save} />
-      {account ? <Button label="Delete account" variant="danger" icon="trash-outline" onPress={remove} /> : null}
+            : "Check your bank app and type what's there now. Update it whenever you like."
+        }
+      >
+        <AmountField label="Current balance" value={balance} onChange={setBalance} currency={account?.currency ?? currency} allowNegative />
+      </Field>
+      <Field
+        label="Update automatically from imported statements"
+        hint={
+          link
+            ? 'Transactions dated after the day you last typed in the balance are added to it.'
+            : 'Pick the statements that belong to this account to keep its balance up to date when you import them.'
+        }
+      >
+        <RadioList
+          options={[{ key: null, label: "Don't update automatically", hint: 'Only the balance you type in' }, ...ACCOUNT_LINKS]}
+          value={link}
+          onChange={setLink}
+        />
+      </Field>
     </Sheet>
   );
 }
@@ -157,7 +187,7 @@ export function PlanSheet({
 }) {
   const db = useDb();
   const c = useColors();
-  const { refresh } = useAppState();
+  const { refresh, currency } = useAppState();
   const [kind, setKind] = useState<'expense' | 'income'>(defaultKind);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
@@ -182,10 +212,10 @@ export function PlanSheet({
     const cents = parseAmount(amount);
     if (!description.trim()) return notify('Add a description', 'For example Rent, Salary or Trip to Lisbon.');
     if (cents === null || cents === 0) return notify('Enter an amount', 'For example 850.00');
-    if (!isValidDay(startDate.trim())) return notify('Check the date', 'Use the format YYYY-MM-DD, for example 2026-10-01.');
+    if (!isValidDay(startDate.trim())) return notify('Pick a date', 'Choose the day it (first) happens.');
     const end = frequency === 'once' ? null : endDate.trim() || null;
     if (end && (!isValidDay(end) || end < startDate.trim())) {
-      return notify('Check the end date', 'Use YYYY-MM-DD, on or after the start date. Leave it empty if it keeps going.');
+      return notify('Check the end date', 'It should be on or after the first date. Leave it empty if it keeps going.');
     }
     await savePlan(db, {
       id: plan?.id,
@@ -199,21 +229,35 @@ export function PlanSheet({
     });
     refresh();
     onClose();
+    toast(plan ? 'Plan saved' : kind === 'income' ? 'Income added to your plans' : 'Expense added to your plans');
   };
 
   const remove = async () => {
     if (!plan) return;
-    if (!(await confirmAction('Delete plan?', `${plan.description} will be removed from your forecast.`, 'Delete'))) return;
     await deletePlan(db, plan.id);
     refresh();
     onClose();
+    toast(`${plan.description} removed from your plans`, 'removed');
   };
 
   const isIncome = kind === 'income';
   const dateLabel = frequency === 'once' ? 'Date' : frequency === 'monthly' ? 'First date (repeats on this day each month)' : 'First date (repeats on this date each year)';
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={plan ? 'Edit plan' : isIncome ? 'Add expected income' : 'Add planned expense'}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={plan ? 'Edit plan' : isIncome ? 'Add expected income' : 'Add planned expense'}
+      subtitle="Counts in your expected balance"
+      preview={<PlanPreview kind={kind} description={description} amount={amount} frequency={frequency} startDate={startDate} endDate={endDate} currency={currency} />}
+      footer={
+        <SheetFooter>
+          {plan ? <HoldButton label="Hold to delete" onConfirm={remove} /> : null}
+          <View style={{ flex: 1 }} />
+          <Button label={plan ? 'Save' : 'Add plan'} icon="checkmark" onPress={save} />
+        </SheetFooter>
+      }
+    >
       <Segmented
         options={[
           { key: 'expense' as const, label: 'Expense' },
@@ -226,53 +270,34 @@ export function PlanSheet({
           else if (category === 'income') setCategory('other');
         }}
       />
-      <View>
-        <FieldLabel>Description</FieldLabel>
-        <TextInput
-          value={description}
-          onChangeText={setDescription}
-          placeholder={isIncome ? 'e.g. Salary' : 'e.g. Rent'}
-          placeholderTextColor={c.textMuted}
-          style={inputStyle(c)}
-        />
-      </View>
-      <View>
-        <FieldLabel>Amount</FieldLabel>
-        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.textMuted} style={[inputStyle(c), styles.bigInput]} />
-      </View>
-      <View>
-        <FieldLabel>How often</FieldLabel>
-        <View style={styles.chips}>
-          {FREQUENCIES.map((f) => (
-            <Chip key={f.key} label={f.label} selected={frequency === f.key} onPress={() => setFrequency(f.key)} />
-          ))}
+      <Field label="Description">
+        <TextInput value={description} onChangeText={setDescription} placeholder={isIncome ? 'e.g. Salary' : 'e.g. Rent'} placeholderTextColor={c.textMuted} style={inputStyle(c)} />
+      </Field>
+      <Field label="Amount">
+        <AmountField label="Amount" value={amount} onChange={setAmount} currency={currency} />
+      </Field>
+      <Field label="How often">
+        <Segmented options={FREQUENCIES} value={frequency} onChange={setFrequency} />
+      </Field>
+      <View style={styles.dates}>
+        <View style={{ flex: 1, minWidth: 180 }}>
+          <Field label={dateLabel}>
+            <DateField label={dateLabel} value={startDate} onChange={setStartDate} />
+          </Field>
         </View>
+        {frequency !== 'once' ? (
+          <View style={{ flex: 1, minWidth: 180 }}>
+            <Field label="Until (optional)">
+              <DateField label="End date" value={endDate} onChange={setEndDate} optional />
+            </Field>
+          </View>
+        ) : null}
       </View>
-      <View>
-        <FieldLabel>{`${dateLabel} · YYYY-MM-DD`}</FieldLabel>
-        <TextInput value={startDate} onChangeText={setStartDate} autoCapitalize="none" style={inputStyle(c)} />
-      </View>
-      {frequency !== 'once' ? (
-        <View>
-          <FieldLabel>End date (optional) · YYYY-MM-DD</FieldLabel>
-          <TextInput
-            value={endDate}
-            onChangeText={setEndDate}
-            autoCapitalize="none"
-            placeholder="Keeps going"
-            placeholderTextColor={c.textMuted}
-            style={inputStyle(c)}
-          />
-        </View>
-      ) : null}
       {!isIncome ? (
-        <View>
-          <FieldLabel>Category</FieldLabel>
-          <CategoryPicker value={category} onChange={setCategory} />
-        </View>
+        <Field label="Category">
+          <CategoryPicker value={category} onChange={setCategory} exclude={['income', 'topup', 'transfers']} />
+        </Field>
       ) : null}
-      <Button label="Save" onPress={save} />
-      {plan ? <Button label="Delete plan" variant="danger" icon="trash-outline" onPress={remove} /> : null}
     </Sheet>
   );
 }
@@ -283,7 +308,7 @@ export function PlanSheet({
 export function DebtSheet({ visible, debt, onClose }: { visible: boolean; debt: Debt | null; onClose: () => void }) {
   const db = useDb();
   const c = useColors();
-  const { refresh } = useAppState();
+  const { refresh, currency } = useAppState();
   const [person, setPerson] = useState('');
   const [direction, setDirection] = useState<DebtDirection>('owed_to_me');
   const [amount, setAmount] = useState('');
@@ -305,19 +330,32 @@ export function DebtSheet({ visible, debt, onClose }: { visible: boolean; debt: 
     await saveDebt(db, { id: debt?.id, person: person.trim(), direction, amountCents: cents, note: note.trim() || null });
     refresh();
     onClose();
+    toast(debt ? 'Debt saved' : 'Debt added');
   };
 
   const remove = async () => {
     if (!debt) return;
-    const settled = debt.direction === 'owed_to_me' ? `${debt.person} has paid you back` : `you've paid ${debt.person} back`;
-    if (!(await confirmAction('Remove debt?', `Remove this when ${settled}.`, 'Remove'))) return;
     await deleteDebt(db, debt.id);
     refresh();
     onClose();
+    toast(debt.direction === 'owed_to_me' ? `${debt.person} has paid you back` : `You've paid ${debt.person} back`, 'removed');
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={debt ? 'Edit debt' : 'Add debt'}>
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={debt ? 'Edit debt' : 'Add debt'}
+      subtitle="Not counted in your total or forecast"
+      preview={<DebtPreview person={person} direction={direction} amount={amount} currency={currency} />}
+      footer={
+        <SheetFooter>
+          {debt ? <HoldButton label="Hold: paid back" onConfirm={remove} /> : null}
+          <View style={{ flex: 1 }} />
+          <Button label={debt ? 'Save' : 'Add debt'} icon="checkmark" onPress={save} />
+        </SheetFooter>
+      }
+    >
       <Segmented
         options={[
           { key: 'owed_to_me' as const, label: 'Owes me' },
@@ -326,21 +364,15 @@ export function DebtSheet({ visible, debt, onClose }: { visible: boolean; debt: 
         value={direction}
         onChange={setDirection}
       />
-      <View>
-        <FieldLabel>Person</FieldLabel>
+      <Field label="Person">
         <TextInput value={person} onChangeText={setPerson} placeholder="Name" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
-      </View>
-      <View>
-        <FieldLabel>Amount still open</FieldLabel>
-        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.textMuted} style={[inputStyle(c), styles.bigInput]} />
-        <Text style={[styles.hint, { color: c.textSecondary }]}>When part is paid back, lower this amount.</Text>
-      </View>
-      <View>
-        <FieldLabel>Note (optional)</FieldLabel>
+      </Field>
+      <Field label="Amount still open" hint="When part is paid back, lower this amount.">
+        <AmountField label="Amount still open" value={amount} onChange={setAmount} currency={currency} />
+      </Field>
+      <Field label="Note (optional)">
         <TextInput value={note} onChangeText={setNote} placeholder="e.g. ₱30,000 or due in December" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
-      </View>
-      <Button label="Save" onPress={save} />
-      {debt ? <Button label="Paid back · remove" variant="danger" icon="checkmark-done-outline" onPress={remove} /> : null}
+      </Field>
     </Sheet>
   );
 }
@@ -353,12 +385,15 @@ export function BudgetSheet({
   category: initialCategory,
   limitCents,
   spentCents,
+  spentByCategory,
   onClose,
 }: {
   visible: boolean;
   category: string | null; // null = new budget
   limitCents: number | null;
   spentCents: number;
+  /** This month's spending per category, so the preview follows the chosen category */
+  spentByCategory?: Map<string, number>;
   onClose: () => void;
 }) {
   const db = useDb();
@@ -374,6 +409,8 @@ export function BudgetSheet({
     }
   }, [visible, initialCategory, limitCents]);
 
+  const spent = spentByCategory?.get(category) ?? (category === initialCategory ? spentCents : 0);
+
   const save = async () => {
     const cents = parseAmount(amount);
     if (cents === null || cents <= 0) return notify('Enter a monthly amount', 'For example 300.00');
@@ -381,6 +418,7 @@ export function BudgetSheet({
     await setBudget(db, category, cents);
     refresh();
     onClose();
+    toast(`${getCategory(category).label} budget saved`);
   };
 
   const remove = async () => {
@@ -388,34 +426,39 @@ export function BudgetSheet({
     await setBudget(db, initialCategory, null);
     refresh();
     onClose();
+    toast(`${getCategory(initialCategory).label} budget removed`, 'removed');
   };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={initialCategory ? `${getCategory(initialCategory).label} budget` : 'Add budget'}>
-      <Text style={[styles.hint, { color: c.textSecondary, marginTop: 0 }]}>
-        A monthly limit for day-to-day spending in one category. What's left of it counts as expected spending in your
-        forecast, so don't also add a budget for things you've planned as expenses (like rent).
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title={initialCategory ? `${getCategory(initialCategory).label} budget` : 'Add budget'}
+      subtitle="A monthly limit for day-to-day spending"
+      preview={<BudgetPreview category={category} limit={amount} spentCents={spent} currency={currency} />}
+      footer={
+        <SheetFooter>
+          {initialCategory ? <HoldButton label="Hold to remove" onConfirm={remove} /> : null}
+          <View style={{ flex: 1 }} />
+          <Button label={initialCategory ? 'Save' : 'Add budget'} icon="checkmark" onPress={save} />
+        </SheetFooter>
+      }
+    >
+      <Text style={[T.body, { color: c.textSecondary }]}>
+        What's left of it counts as expected spending in your forecast, so don't also add a budget for things you've planned as
+        expenses (like rent).
       </Text>
-      {initialCategory ? (
-        <Text style={{ color: c.text, fontSize: 15 }}>Spent this month: {formatMoney(spentCents, currency)}</Text>
-      ) : null}
-      <View>
-        <FieldLabel>Category</FieldLabel>
-        <CategoryPicker value={category} onChange={setCategory} />
-      </View>
-      <View>
-        <FieldLabel>Monthly limit</FieldLabel>
-        <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={c.textMuted} style={[inputStyle(c), styles.bigInput]} />
-      </View>
-      <Button label="Save" onPress={save} />
-      {initialCategory ? <Button label="Remove budget" variant="danger" icon="trash-outline" onPress={remove} /> : null}
+      <Field label="Monthly limit">
+        <AmountField label="Monthly limit" value={amount} onChange={setAmount} currency={currency} />
+      </Field>
+      <Field label="Category">
+        <CategoryPicker value={category} onChange={setCategory} exclude={['income', 'topup', 'transfers']} />
+      </Field>
     </Sheet>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: space.sm },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  bigInput: { fontSize: 26, fontFamily: 'BricolageGrotesque_600SemiBold' },
   hint: { fontSize: 13, lineHeight: 19, marginTop: 8 },
+  dates: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
 });
