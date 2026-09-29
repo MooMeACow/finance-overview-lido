@@ -126,6 +126,23 @@ export function Water({ radius = 0 }: { radius?: number }) {
   const dark = useIsDark();
   const reduced = useReducedMotion();
   const pal = dark ? NIGHT : DAY;
+  // The GL setup outlives theme changes: a theme flip only swaps the colours (re-creating the
+  // context would hand back the one we just released, and the pool would go blank)
+  const darkRef = useRef(dark);
+  const recolor = useRef<((dark: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    darkRef.current = dark;
+    recolor.current?.(dark);
+  }, [dark]);
+
+  // Release the GPU context only when the pool really leaves the page
+  useEffect(
+    () => () => {
+      canvasRef.current?.getContext('webgl')?.getExtension('WEBGL_lose_context')?.loseContext();
+    },
+    [],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -157,13 +174,17 @@ export function Water({ radius = 0 }: { radius?: number }) {
     const uRes = u('uRes');
     const uTime = u('uTime');
     const uRip = u('uRip');
-    gl.uniform3fv(u('uDeep'), hex(pal.deep));
-    gl.uniform3fv(u('uMid'), hex(pal.mid));
-    gl.uniform3fv(u('uShallow'), hex(pal.shallow));
-    gl.uniform3fv(u('uLight'), hex(pal.light));
-    gl.uniform3fv(u('uSun'), hex(pal.sun));
-    gl.uniform1f(u('uNight'), dark ? 1 : 0);
-    gl.uniform1f(u('uGain'), dark ? 1 : 0.74);
+    const applyPalette = (isDark: boolean) => {
+      const p = isDark ? NIGHT : DAY;
+      gl.uniform3fv(u('uDeep'), hex(p.deep));
+      gl.uniform3fv(u('uMid'), hex(p.mid));
+      gl.uniform3fv(u('uShallow'), hex(p.shallow));
+      gl.uniform3fv(u('uLight'), hex(p.light));
+      gl.uniform3fv(u('uSun'), hex(p.sun));
+      gl.uniform1f(u('uNight'), isDark ? 1 : 0);
+      gl.uniform1f(u('uGain'), isDark ? 1 : 0.74);
+    };
+    applyPalette(darkRef.current);
 
     const ripples = new Float32Array(16);
     let nextRipple = 0;
@@ -233,18 +254,22 @@ export function Water({ radius = 0 }: { radius?: number }) {
     const onVisibility = () => (document.hidden ? pause() : play());
     document.addEventListener('visibilitychange', onVisibility);
 
+    recolor.current = (isDark) => {
+      applyPalette(isDark);
+      if (!running) draw();
+    };
     draw();
     play();
     return () => {
       pause();
+      recolor.current = null;
       offRipple();
       window.removeEventListener('pointerdown', onDown);
       document.removeEventListener('visibilitychange', onVisibility);
       ro.disconnect();
       io.disconnect();
-      gl.getExtension('WEBGL_lose_context')?.loseContext();
     };
-  }, [dark, reduced, pal]);
+  }, [reduced]);
 
   return (
     <View
