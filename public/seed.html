@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Load mock data</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f7fb; color: #0f1f33; }
+    main { max-width: 420px; padding: 24px; }
+    a { color: #1f6feb; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 style="font-size: 20px">Loading mock data…</h1>
+    <p id="msg">One year of finances for someone in Amsterdam earning €85,000 a year.</p>
+  </main>
+  <script>
+    // Writes the generated backup straight into the app's browser storage, moved forward so the
+    // mock year always ends yesterday (the same shift the demo build applies on a first visit).
+    const KEY = 'finance-overview:v1';
+    const DAY = 86400000;
+    const pad = (n) => String(n).padStart(2, '0');
+    const toDay = (s) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+    const fromDay = (t) => { const d = new Date(t); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); };
+    function shiftToYesterday(data) {
+      const last = data.transactions.reduce((m, t) => Math.max(m, toDay(t.date)), -Infinity);
+      const now = new Date();
+      const delta = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - DAY - last;
+      if (!Number.isFinite(delta) || delta <= 0) return data;
+      const move = (s) => fromDay(toDay(s) + delta) + s.slice(10);
+      return Object.assign({}, data, {
+        transactions: data.transactions.map((t) => Object.assign({}, t, { date: move(t.date) })),
+        imports: data.imports.map((i) => Object.assign({}, i, { imported_at: move(i.imported_at) })),
+        accounts: data.accounts.map((a) => Object.assign({}, a, { updated_at: move(a.updated_at) })),
+        plans: data.plans.map((p) => Object.assign({}, p, { start_date: move(p.start_date), end_date: p.end_date ? move(p.end_date) : null })),
+        debts: data.debts.map((d) => Object.assign({}, d, { updated_at: move(d.updated_at) })),
+      });
+    }
+    const msg = document.getElementById('msg');
+    fetch('mock/finance-backup-mock-85k.json', { cache: 'no-store' })
+      .then((r) => {
+        if (!r.ok) throw new Error('Mock file not found. Run the generator first (see mock-data/README.md).');
+        return r.json();
+      })
+      .then((backup) => {
+        if (backup.format !== 'finance-overview-backup') throw new Error('Not a Finance Overview backup.');
+        const existing = localStorage.getItem(KEY);
+        if (existing) localStorage.setItem(KEY + ':before-mock', existing);
+        localStorage.setItem(KEY, JSON.stringify(shiftToYesterday(backup.data)));
+        localStorage.setItem('finance-overview:demo-seeded', '1');
+        msg.textContent = `Loaded ${backup.data.transactions.length} transactions. Opening the app…`;
+        setTimeout(() => location.replace('/'), 600);
+      })
+      .catch((e) => {
+        document.querySelector('h1').textContent = 'Could not load mock data';
+        msg.textContent = e.message;
+      });
+  </script>
+</body>
+</html>
