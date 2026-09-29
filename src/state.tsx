@@ -3,6 +3,7 @@ import { useDb } from './db/provider';
 
 import { currentMonthKey } from './lib/dates';
 import { getLatestMonth, getMainCurrency } from './db/database';
+import { startSync, subscribeRemoteData } from './sync';
 
 type AppState = {
   month: string;
@@ -23,6 +24,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [initialized, setInitialized] = useState(false);
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
+
+  // Web: keep in sync with other devices; reload screens when data arrives from them
+  useEffect(() => {
+    startSync();
+    return subscribeRemoteData(refresh);
+  }, [refresh]);
 
   useEffect(() => {
     let alive = true;

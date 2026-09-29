@@ -3,5 +3,9 @@
   "compilerOptions": {
     "strict": true
   },
-  "exclude": ["test"]
+  "exclude": [
+    "test",
+    "worker",
+    "dist"
+  ]
 }

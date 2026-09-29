@@ -15,6 +15,9 @@ import { formatMoney } from '../lib/money';
 import { getCategory } from '../lib/categories';
 import { type Setup, isSetupFile, parseSetupFile, planSetupImport } from '../lib/setupFile';
 import { frequencyLabel } from '../lib/forecast';
+import { backupSupported, describeBackup, downloadBackup, isBackupFile, restoreBackup } from '../sync/backup';
+import { useSyncState } from '../sync/useSync';
+import { syncLabel } from '../components/SyncControls';
 import {
   type Mapping,
   type ParseResult,
@@ -46,7 +49,8 @@ type LoadedSetup = { fileName: string; data: Setup; toAdd: ReturnType<typeof pla
 
 const SOURCE_LABEL = { revolut: 'Revolut statement', ing: 'ING statement', csv: 'Bank CSV' };
 
-export function ImportScreen({ onDone }: { onDone: () => void }) {
+export function ImportScreen({ onDone, onOpenSync }: { onDone: () => void; onOpenSync: () => void }) {
+  const sync = useSyncState();
   const db = useDb();
   const c = useColors();
   const { refresh, setMonth, version } = useAppState();
@@ -88,6 +92,21 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
       const asset = res.assets[0];
       setBusy(true);
       const text = await readPickedFile(asset);
+      if (isBackupFile(text)) {
+        // A backup made with "Download backup": add its contents to what's here
+        const info = describeBackup(text);
+        const n = info.counts;
+        const ok = await confirmAction(
+          'Restore backup?',
+          `Backup from ${shortDate(info.exportedAt.slice(0, 10))}: ${n.transactions} transactions, ${n.accounts} accounts, ${n.plans} plans, ${n.budgets} budgets, ${n.debts} debts. These are added to what's already here; nothing here is removed.`,
+          'Restore',
+        );
+        if (!ok) return;
+        restoreBackup(text);
+        refresh();
+        notify('Backup restored', 'Everything from the backup has been added.');
+        return;
+      }
       if (isSetupFile(text)) {
         // A plans file: plans, budgets and debts to add in one go
         const data = parseSetupFile(text);
@@ -174,7 +193,9 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
   const wipe = async () => {
     const ok = await confirmAction(
       'Delete all data?',
-      'Removes every transaction, import and category rule stored here.',
+      sync.status === 'synced' || sync.status === 'syncing' || sync.status === 'offline'
+        ? 'Removes everything: transactions, accounts, plans, budgets and debts, here AND on your other synced devices.'
+        : 'Removes everything stored here: transactions, accounts, plans, budgets and debts.',
       'Delete everything',
     );
     if (!ok) return;
@@ -304,10 +325,23 @@ export function ImportScreen({ onDone }: { onDone: () => void }) {
           <SectionTitle>Your data</SectionTitle>
           <Card style={{ gap: space.md }}>
             <Text style={[styles.body, { color: c.textSecondary }]}>
-              {Platform.OS === 'web'
-                ? 'Everything is stored only in this browser on this device. Nothing is uploaded anywhere. Other browsers and devices have their own separate data.'
-                : 'Everything is stored only on this device. Nothing is uploaded anywhere.'}
+              {Platform.OS !== 'web'
+                ? 'Everything is stored only on this device. Nothing is uploaded anywhere.'
+                : sync.status === 'unavailable'
+                  ? 'Everything is stored only in this browser. Sync between devices works on the hosted version of the app.'
+                  : 'A copy is kept in this browser so the app also works offline. With sync on, it is encrypted with your passphrase and kept in step with your other devices.'}
             </Text>
+            {Platform.OS === 'web' && sync.status !== 'unavailable' ? (
+              <Button label={syncLabel(sync).text} variant="secondary" icon={syncLabel(sync).icon} onPress={onOpenSync} />
+            ) : null}
+            {backupSupported ? (
+              <>
+                <Button label="Download backup" variant="secondary" icon="download-outline" onPress={downloadBackup} />
+                <Text style={[styles.small, { color: c.textMuted }]}>
+                  The backup file isn't encrypted, so keep it somewhere private. To restore it, choose it with "Choose file" above.
+                </Text>
+              </>
+            ) : null}
             <Button label="Delete all data" variant="danger" icon="trash-outline" onPress={wipe} />
           </Card>
         </>

@@ -131,7 +131,7 @@ test('web storage: data saved by the previous version still loads', async () => 
   const fresh = await import('../src/db/database.web.ts?reload=' + Date.now());
   assert.deepEqual(await fresh.getAccounts(null), []);
   await fresh.saveAccount(null, { name: 'Cash', type: 'current', link: null, balanceCents: 2000, currency: 'EUR' });
-  assert.equal((await fresh.getAccounts(null))[0].id, 1);
+  assert.equal((await fresh.getAccounts(null)).length, 1);
 });
 
 test('web storage: accounts saved before account types load as everyday accounts', async () => {

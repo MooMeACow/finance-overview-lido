@@ -9,7 +9,7 @@ register(
         try {
           return await next(specifier, context);
         } catch (err) {
-          if (specifier.startsWith('.') && !/\\.[a-z]+$/.test(specifier)) {
+          if (specifier.startsWith('.') && !/\\.(ts|tsx|js|mjs|cjs|json)$/.test(specifier)) {
             return next(specifier + '.ts', context);
           }
           throw err;

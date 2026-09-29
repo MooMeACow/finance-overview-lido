@@ -1,7 +1,7 @@
 /**
  * Browser storage for the web version (localStorage).
  * Same functions and behaviour as database.ts (SQLite), which the phone apps use.
- * Data lives only in the browser it was entered in; it is never uploaded.
+ * On the hosted site, sync (src/sync) encrypts this data and keeps devices in step.
  */
 import type { ParsedTxn } from '../lib/importers';
 import { shiftMonth } from '../lib/dates';
@@ -15,9 +15,10 @@ export type Db = unknown;
 export const DATABASE_NAME = 'finance.db';
 const STORAGE_KEY = 'finance-overview:v1';
 
-type StoredTxn = Txn & { hash: string | null };
+export type StoredTxn = Txn & { hash: string | null };
 
-type Data = {
+/** Everything the web app stores, as one object. */
+export type Data = {
   transactions: StoredTxn[];
   imports: ImportRecord[];
   rules: Record<string, string>;
@@ -25,6 +26,7 @@ type Data = {
   plans: Plan[];
   budgets: Budget[];
   debts: Debt[];
+  // Counters from before ids became unique across devices; kept so old data still loads
   nextTxnId: number;
   nextImportId: number;
   nextAccountId: number;
@@ -32,7 +34,7 @@ type Data = {
   nextDebtId: number;
 };
 
-const empty = (): Data => ({
+export const empty = (): Data => ({
   transactions: [],
   imports: [],
   rules: {},
@@ -48,6 +50,39 @@ const empty = (): Data => ({
 });
 
 let cache: Data | null = null;
+const changeListeners = new Set<() => void>();
+let lastId = 0;
+
+/**
+ * New record id. Time-based with a random part, so two devices adding records
+ * while offline won't pick the same id. Always larger than older sequential ids.
+ */
+export function newId(): number {
+  const candidate = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  lastId = Math.max(lastId + 1, candidate);
+  return lastId;
+}
+
+/** Called after every change made in this browser (used to sync). */
+export function onLocalChange(listener: () => void): () => void {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+/** The whole data set (for sync and backups). */
+export function getSnapshot(): Data {
+  return load();
+}
+
+/** Replaces the whole data set (for sync and backups). Doesn't count as a local change. */
+export function replaceSnapshot(data: Data): void {
+  write({ ...empty(), ...data });
+}
+
+/** Replaces the whole data set as a change made here (e.g. restoring a backup), so it gets synced. */
+export function saveSnapshot(data: Data): void {
+  save({ ...empty(), ...data });
+}
 
 function storage(): Storage | null {
   try {
@@ -71,7 +106,11 @@ function load(): Data {
 }
 
 function save(data: Data): void {
-  cache = data;
+  write(data);
+  for (const listener of changeListeners) listener();
+}
+
+function write(data: Data): void {
   const s = storage();
   if (!s) throw new Error('This browser does not allow saving data (private mode or blocked storage).');
   try {
@@ -79,6 +118,8 @@ function save(data: Data): void {
   } catch {
     throw new Error('Could not save: the browser storage is full or blocked.');
   }
+  // Only show the change once it's safely stored
+  cache = data;
 }
 
 function nowString(): string {
@@ -198,14 +239,13 @@ export async function countExisting(_db: Db, hashes: string[]): Promise<number> 
 export async function importTransactions(_db: Db, fileName: string, source: string, txns: ParsedTxn[]): Promise<number> {
   const data = load();
   const known = new Set(data.transactions.map((t) => t.hash));
-  const importId = data.nextImportId;
-  let nextId = data.nextTxnId;
+  const importId = newId();
   const added: StoredTxn[] = [];
   for (const t of txns) {
     if (known.has(t.hash)) continue;
     known.add(t.hash);
     added.push({
-      id: nextId++,
+      id: newId(),
       date: t.date,
       description: t.description,
       amount_cents: t.amountCents,
@@ -223,8 +263,6 @@ export async function importTransactions(_db: Db, fileName: string, source: stri
     ...data,
     transactions: [...data.transactions, ...added],
     imports: [...data.imports, { id: importId, file_name: fileName, source, imported_at: nowString(), row_count: added.length }],
-    nextTxnId: nextId,
-    nextImportId: importId + 1,
   });
   return added.length;
 }
@@ -235,7 +273,7 @@ export async function addManualTransaction(
 ): Promise<void> {
   const data = load();
   const txn: StoredTxn = {
-    id: data.nextTxnId,
+    id: newId(),
     date: t.date,
     description: t.description,
     amount_cents: t.amountCents,
@@ -247,7 +285,7 @@ export async function addManualTransaction(
     import_id: null,
     hash: null,
   };
-  save({ ...data, transactions: [...data.transactions, txn], nextTxnId: data.nextTxnId + 1 });
+  save({ ...data, transactions: [...data.transactions, txn] });
 }
 
 export async function updateTransaction(
@@ -313,8 +351,8 @@ export async function saveAccount(
   if (a.id) {
     save({ ...data, accounts: data.accounts.map((x) => (x.id === a.id ? { ...x, ...fields } : x)) });
   } else {
-    const created = { id: data.nextAccountId, ...base, balance_cents: a.balanceCents ?? 0, updated_at: nowString() };
-    save({ ...data, accounts: [...data.accounts, created], nextAccountId: data.nextAccountId + 1 });
+    const created = { id: newId(), ...base, balance_cents: a.balanceCents ?? 0, updated_at: nowString() };
+    save({ ...data, accounts: [...data.accounts, created] });
   }
 }
 
@@ -336,7 +374,7 @@ export async function savePlan(_db: Db, p: Omit<Plan, 'id'> & { id?: number }): 
   if (id) {
     save({ ...data, plans: data.plans.map((x) => (x.id === id ? { ...x, ...fields } : x)) });
   } else {
-    save({ ...data, plans: [...data.plans, { id: data.nextPlanId, ...fields }], nextPlanId: data.nextPlanId + 1 });
+    save({ ...data, plans: [...data.plans, { id: newId(), ...fields }] });
   }
 }
 
@@ -373,7 +411,7 @@ export async function saveDebt(
   if (d.id) {
     save({ ...data, debts: data.debts.map((x) => (x.id === d.id ? { ...x, ...fields } : x)) });
   } else {
-    save({ ...data, debts: [...data.debts, { id: data.nextDebtId, ...fields }], nextDebtId: data.nextDebtId + 1 });
+    save({ ...data, debts: [...data.debts, { id: newId(), ...fields }] });
   }
 }
 

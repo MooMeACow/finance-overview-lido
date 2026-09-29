@@ -12,3 +12,7 @@ web-build/
 # Never commit real bank statements
 *.csv
 !test/fixtures/*.csv
+
+# Cloudflare
+.wrangler/
+.dev.vars

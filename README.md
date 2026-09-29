@@ -1,6 +1,6 @@
 # Finance Overview
 
-A simple, private money tracker that works in your phone's browser (and as an iOS/Android app). Import a bank statement (CSV), see a monthly overview of money in and out, and browse, categorize and add transactions. Everything is stored on your device; nothing is uploaded anywhere.
+A simple, private money tracker that works in the browser on all your devices, with end-to-end encrypted sync (and as an iOS/Android app). Import a bank statement (CSV), see a monthly overview of money in and out, and browse, categorize and add transactions. Your data is encrypted on your device before it's synced, so only you can read it.
 
 Built with React Native and Expo (SDK 57).
 
@@ -62,18 +62,60 @@ The terminal shows a local address (usually `http://localhost:8081`). Open it in
 - On your phone, open `http://<that-ip>:8081`, e.g. `http://192.168.1.23:8081`.
 - If macOS asks whether to allow incoming connections for Node, allow it.
 
-This works while `pnpm web` is running on your Mac. To use it anywhere without your Mac, the site needs to be hosted online; see "Publishing" below.
+This works while `pnpm web` is running on your Mac. To use it anywhere and sync between devices, host it on Cloudflare (below).
 
 ### Where your data is stored
 
-- **Web:** in the browser you use (browser storage). Each browser and device has its own separate data, so data you import on your Mac won't appear on your phone. Clearing the browser's website data deletes it.
-- **iOS/Android app:** in a SQLite database on the device.
+- **Hosted web version with sync on:** every device keeps its own copy (so it works offline), and an **encrypted** copy is stored in your Cloudflare account. It's encrypted on your device with your passphrase before it's uploaded, so Cloudflare can't read it. Changes sync automatically between your devices.
+- **Web version without sync** (for example `pnpm web` on localhost): only in that browser.
+- **iOS/Android app:** in a SQLite database on the device (sync isn't available in the phone app yet).
 
-Nothing is uploaded anywhere in either case.
+**Your passphrase can't be recovered.** If you forget it, nobody can decrypt the synced data. Write it down somewhere safe. You can also download an (unencrypted) backup from **Import → Your data → Download backup**.
 
-### Publishing (later)
+## Host it on Cloudflare (with sync)
 
-`pnpm build:web` creates a static website in the `dist` folder, which any static host can serve (for example EAS Hosting, Netlify, Vercel or GitHub Pages). Not set up yet.
+The app runs as one Cloudflare Worker: it serves the website and a small sync API, with a Cloudflare D1 database for the encrypted data and Cloudflare Access (GitHub login) in front of it. For one person's use this should fit in Cloudflare's free plans. Cloudflare's dashboard changes over time, so menu names below may differ slightly.
+
+**1. Create the Worker from this repo**
+
+1. In the Cloudflare dashboard go to **Workers & Pages → Create → Import a repository** and pick `Finance_Overview`.
+2. Set:
+   - **Build command:** `npx expo export --platform web`
+   - **Deploy command:** `npx wrangler deploy` (the default)
+3. Deploy. The first deploy also creates the D1 database (`wrangler.jsonc` only names the binding; Wrangler 4.45+ creates it automatically).
+4. Note the address under **Settings → Domains & Routes**, e.g. `https://finance-overview.<you>.workers.dev`. Don't start using it yet: first put the login in front of it.
+
+**2. Add GitHub as a login method** ([Cloudflare's guide](https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/github/))
+
+1. In Cloudflare **Zero Trust**, find your team name under **Settings** (it looks like `<team>.cloudflareaccess.com`). The first time, Zero Trust asks you to choose a plan: pick **Free**.
+2. On GitHub: **Settings → Developer settings → OAuth Apps → New OAuth App**
+   - Homepage URL: `https://<team>.cloudflareaccess.com`
+   - Authorization callback URL: `https://<team>.cloudflareaccess.com/cdn-cgi/access/callback`
+   - Create it, copy the **Client ID**, and generate a **Client secret**.
+3. In Zero Trust: **Integrations → Identity providers → Add new → GitHub**, paste the Client ID (App ID) and secret, save, and use **Test** to check it works.
+
+**3. Put the login in front of the app**
+
+1. Open your Worker in **Workers & Pages**, go to its **Access** settings and choose **Protect this Worker behind Access** for **all traffic** (this also covers the workers.dev address and previews).
+2. In the policy, allow only **your own email address** and choose **GitHub** as the login method.
+3. Extra safety (recommended): in the Worker's **Settings → Variables and Secrets**, add a variable `ALLOWED_EMAILS` with your email address. The sync API then refuses every other account, even if the Access policy were ever changed.
+
+**4. Turn on sync**
+
+1. Open the app's address and log in with GitHub.
+2. To bring over what you entered on localhost: there, go to **Import → Download backup**; on the hosted app, go to **Import → Choose file** and pick the backup to restore it.
+3. Click **Set up** in the blue bar (or the sync status at the bottom of the sidebar) and choose a passphrase.
+4. On your other laptop: open the same address, log in with GitHub, click **Unlock** and enter the same passphrase. Everything appears.
+5. On an iPhone: open it in Safari and use **Share → Add to Home Screen**, then open it from there (Safari removes data of websites you haven't visited for 7 days, but not of home-screen apps).
+
+After this, every push to `main` redeploys the app automatically.
+
+### How sync works
+
+- Each device keeps a full copy, so the app works offline. Changes upload a moment after you make them; other devices pick them up when you switch back to the app, come back online, or within a minute.
+- Your data is encrypted in the browser with AES-GCM (key made from your passphrase with PBKDF2, 600,000 rounds). The server only stores the encrypted result and a version number.
+- If two devices changed things at the same time, both sets of changes are combined. Only when the same item was changed on both does the device that syncs last keep its version, and an edit always beats a delete. The same bank statement imported on two devices is kept once.
+- "Remember on this device" stores the key in the browser in a form that can't be read out. Use **Forget passphrase on this device** on a device that isn't yours.
 
 ## Run it (phone app)
 
@@ -89,7 +131,7 @@ nodeLinker: hoisted
 
 ## Tests
 
-The CSV parsing, amount/date handling, Revolut import, forecast and web storage are covered by tests that run with Node's built-in test runner (Node 22+):
+The CSV parsing, amount/date handling, bank imports, forecast, balances, web storage, encryption, sync and the Worker API are covered by tests that run with Node's built-in test runner (Node 22+):
 
 ```bash
 pnpm test
@@ -121,6 +163,11 @@ src/lib/importers.ts         Revolut and generic bank CSV import
 src/lib/forecast.ts          Plan dates, upcoming items and the balance forecast
 src/lib/setupFile.ts         Plans file (plans, budgets, debts) format and import
 src/lib/balances.ts          Account balances kept up to date from imported statements
+src/lib/vaultCrypto.ts       Encryption of synced data (AES-GCM, PBKDF2)
+src/lib/syncMerge.ts         Combining changes from two devices
+src/sync/                    Sync engine (web) and backups
+worker/                      Cloudflare Worker: sync API on D1, login check
+wrangler.jsonc               Cloudflare configuration
 src/screens/                 Dashboard, Monthly, Transactions, Import
 src/components/              UI building blocks, charts, tables, sheets/side panels
 src/layout.ts                Breakpoints for the responsive layout

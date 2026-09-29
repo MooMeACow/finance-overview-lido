@@ -13,6 +13,8 @@ import { ImportScreen } from './src/screens/ImportScreen';
 import type { IconName } from './src/components/ui';
 import { radius, space, useColors } from './src/theme';
 import { useLayout } from './src/layout';
+import { SyncBanner, SyncSheet, syncLabel } from './src/components/SyncControls';
+import { useSyncState } from './src/sync/useSync';
 
 type Tab = 'dashboard' | 'monthly' | 'transactions' | 'import';
 
@@ -40,6 +42,7 @@ function Main() {
   const { isWide } = useLayout();
   const [tab, setTab] = useState<Tab>('dashboard');
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [syncOpen, setSyncOpen] = useState(false);
 
   const go = (t: Tab) => {
     if (t !== 'transactions') setCategoryFilter(null);
@@ -61,7 +64,8 @@ function Main() {
       {tab === 'transactions' ? (
         <TransactionsScreen categoryFilter={categoryFilter} onClearCategory={() => setCategoryFilter(null)} />
       ) : null}
-      {tab === 'import' ? <ImportScreen onDone={() => go('monthly')} /> : null}
+      {tab === 'import' ? <ImportScreen onDone={() => go('monthly')} onOpenSync={() => setSyncOpen(true)} /> : null}
+      <SyncSheet visible={syncOpen} onClose={() => setSyncOpen(false)} />
     </>
   );
 
@@ -70,8 +74,11 @@ function Main() {
     return (
       <View style={[styles.root, styles.row, { backgroundColor: c.background }]}>
         <StatusBar style="auto" />
-        <Sidebar active={tab} onChange={go} />
-        <View style={{ flex: 1 }}>{screen}</View>
+        <Sidebar active={tab} onChange={go} onOpenSync={() => setSyncOpen(true)} />
+        <View style={{ flex: 1 }}>
+          <SyncBanner onOpen={() => setSyncOpen(true)} />
+          {screen}
+        </View>
       </View>
     );
   }
@@ -80,14 +87,16 @@ function Main() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top', 'left', 'right']}>
       <StatusBar style="auto" />
+      <SyncBanner onOpen={() => setSyncOpen(true)} />
       <View style={{ flex: 1 }}>{screen}</View>
       <TabBar active={tab} onChange={go} />
     </SafeAreaView>
   );
 }
 
-function Sidebar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
+function Sidebar({ active, onChange, onOpenSync }: { active: Tab; onChange: (t: Tab) => void; onOpenSync: () => void }) {
   const c = useColors();
+  const sync = syncLabel(useSyncState());
   return (
     <View style={[styles.sidebar, { backgroundColor: c.card, borderRightColor: c.hairline }]}>
       <View style={styles.brand}>
@@ -124,12 +133,20 @@ function Sidebar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void
         })}
       </View>
 
-      <View style={[styles.sidebarFooter, { borderTopColor: c.hairline }]}>
-        <Ionicons name="lock-closed-outline" size={14} color={c.textMuted} />
-        <Text style={{ color: c.textMuted, fontSize: 12, lineHeight: 17, flex: 1 }}>
-          Your data stays on this device. Nothing is uploaded.
+      <Pressable
+        onPress={onOpenSync}
+        accessibilityRole="button"
+        style={(state) => [
+          styles.sidebarFooter,
+          { borderTopColor: c.hairline },
+          (state as { hovered?: boolean }).hovered && { backgroundColor: c.track },
+        ]}
+      >
+        <Ionicons name={sync.icon} size={15} color={sync.attention ? c.primary : c.textMuted} />
+        <Text style={{ color: sync.attention ? c.primary : c.textMuted, fontSize: 12, lineHeight: 17, flex: 1, fontWeight: sync.attention ? '600' : '400' }}>
+          {sync.text}
         </Text>
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -192,8 +209,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: space.sm,
     paddingTop: space.lg,
+    paddingBottom: space.sm,
     paddingHorizontal: space.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
   },
   tabBar: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.sm },
   tab: { flex: 1, alignItems: 'center', gap: 2 },
