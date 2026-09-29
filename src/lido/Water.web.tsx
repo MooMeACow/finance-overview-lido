@@ -233,9 +233,12 @@ export function Water({ radius = 0 }: { radius?: number }) {
       ripples[i + 3] = strength;
     });
 
+    // the pool this water fills; a press on something laid over it (a card) doesn't ripple it
+    const host = canvas.parentElement?.parentElement;
     const onDown = (e: PointerEvent) => {
       const r = canvas.getBoundingClientRect();
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      if (!(e.target instanceof Node) || !host?.contains(e.target)) return;
       pool.ripple(e.clientX - r.left, e.clientY - r.top, 0.9);
     };
     window.addEventListener('pointerdown', onDown, { passive: true });

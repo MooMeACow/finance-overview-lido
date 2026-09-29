@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 import { fonts } from '../theme';
 import { Raft, type Layout, type Mood, type OtterSpec } from './otter/engine';
-import { idleSeconds, pointer, trackPointer } from './pointer';
+import { idleSeconds, pointer, reaches, trackPointer } from './pointer';
 import { pool, raft as raftBus } from './buses';
 import { useReducedMotion } from './motionPrefs';
 
@@ -13,7 +13,8 @@ export type RaftLayout = Omit<Layout, 'width' | 'height'>;
 /**
  * The otters in the pool, one per account. Draws into a canvas laid over the water;
  * the canvas ignores the pointer, so everything underneath stays clickable, and otters are
- * hit-tested from the page's pointer instead. Hover shows the account, click opens it.
+ * hit-tested from the page's pointer instead, wherever nothing covers the pool. Hover shows
+ * the account, click opens it.
  */
 export function OtterRaft({
   otters,
@@ -54,6 +55,8 @@ export function OtterRaft({
     if (!canvas || !tip) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    // the pool this raft floats in; anything laid over it (a card, the top bar) shields the otters
+    const host = canvas.parentElement?.parentElement;
 
     const raft = new Raft();
     raftRef.current = raft;
@@ -93,7 +96,7 @@ export function OtterRaft({
       const recent = performance.now() - pointer.lastMove < 9000;
       const look = pointer.active && recent ? { x: pointer.x - rect.left, y: pointer.y - rect.top } : null;
       const inside = !!look && look.x >= 0 && look.y >= 0 && look.x <= rect.width && look.y <= rect.height;
-      const hit = inside && look ? raft.hit(look.x, look.y) : null;
+      const hit = inside && look && reaches(host, pointer.x, pointer.y) ? raft.hit(look.x, look.y) : null;
       raft.hovered = hit;
       const id = hit ? hit.spec.id : null;
       if (id !== hoveredId) {
@@ -142,6 +145,7 @@ export function OtterRaft({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+      if (!(e.target instanceof Node) || !host?.contains(e.target)) return;
       const hit = raft.hit(x, y);
       if (!hit) return;
       raft.cheer(hit, performance.now() / 1000);
