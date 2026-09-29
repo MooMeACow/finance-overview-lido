@@ -12,7 +12,8 @@
       "edgeToEdgeEnabled": true
     },
     "plugins": [
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font"
     ],
     "web": {
       "bundler": "metro",

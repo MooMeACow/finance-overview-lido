@@ -1,24 +1,26 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, View } from 'react-native';
 
-import { space, useColors } from '../theme';
+import { fonts, radius, space, useColors } from '../theme';
 import { getCategory } from '../lib/categories';
 import type { Txn } from '../db/database';
-import { Money, type IconName } from './ui';
+import { Money, Press, Text, type IconName } from './ui';
+import { Icon } from '../lido/Icon';
 
 export function TransactionRow({ txn, onPress }: { txn: Txn; onPress: () => void }) {
   const c = useColors();
   const cat = getCategory(txn.category);
   const excluded = txn.excluded === 1;
+  const income = txn.amount_cents > 0 && !excluded;
   return (
-    <Pressable
+    <Press
+      feedback="soft"
       onPress={onPress}
       accessibilityRole="button"
-      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.track }]}
+      style={({ hovered, pressed }) => [styles.row, (hovered || pressed) && { backgroundColor: c.hover }]}
     >
-      <View style={[styles.icon, { backgroundColor: c.track }]}>
-        <Ionicons name={cat.icon as IconName} size={18} color={c.textSecondary} />
+      <View style={[styles.icon, { backgroundColor: income ? c.accentSoft : c.track }]}>
+        <Icon name={cat.icon as IconName} size={19} color={c.primary} weight="duotone" duotoneColor={c.primary} />
       </View>
       <View style={styles.middle}>
         <Text style={[styles.desc, { color: c.text }]} numberOfLines={1}>
@@ -26,8 +28,8 @@ export function TransactionRow({ txn, onPress }: { txn: Txn; onPress: () => void
         </Text>
         <Text style={[styles.meta, { color: c.textMuted }]} numberOfLines={1}>
           {cat.label}
-          {excluded ? ' · not counted' : ''}
-          {txn.note ? ` · ${txn.note}` : ''}
+          {excluded ? ', not counted' : ''}
+          {txn.note ? `, ${txn.note}` : ''}
         </Text>
       </View>
       <Money
@@ -35,15 +37,15 @@ export function TransactionRow({ txn, onPress }: { txn: Txn; onPress: () => void
         currency={txn.currency}
         style={{ ...styles.amount, ...(excluded ? { opacity: 0.45, textDecorationLine: 'line-through' as const } : null) }}
       />
-    </Pressable>
+    </Press>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: 12 },
-  icon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  middle: { flex: 1, gap: 2 },
-  desc: { fontSize: 15, fontWeight: '500' },
-  meta: { fontSize: 13 },
-  amount: { fontSize: 15, fontWeight: '600' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 10, paddingHorizontal: space.sm, borderRadius: radius.sm },
+  icon: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  middle: { flex: 1, gap: 2, minWidth: 0 },
+  desc: { fontFamily: fonts.ui[500], fontSize: 15 },
+  meta: { fontFamily: fonts.ui[400], fontSize: 13 },
+  amount: { fontFamily: fonts.ui[600], fontSize: 15 },
 });

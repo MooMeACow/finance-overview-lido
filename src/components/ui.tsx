@@ -4,48 +4,119 @@ import {
   Modal,
   Platform,
   Pressable,
+  type PressableProps,
   ScrollView,
+  type StyleProp,
   StyleSheet,
-  Text,
   TextStyle,
   View,
   ViewStyle,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { radius, space, useColors } from '../theme';
+import { motion, radius, shadow, space, type as T, useColors, type Colors } from '../theme';
 import { useLayout } from '../layout';
 import { monthLabel, shiftMonth } from '../lib/dates';
 import { formatMoney } from '../lib/money';
+import { Text } from '../lido/Text';
+import { Icon, type IconName } from '../lido/Icon';
+import { OtterPortrait } from '../lido/OtterPortrait';
+import { isWeb, transition, web } from '../lido/web';
 
-export type IconName = React.ComponentProps<typeof Ionicons>['name'];
+export type { IconName };
+export { Text };
+
+/** Height of the floating navigation, so pages can start below it. */
+export const TOP_BAR = 64;
+
+/** Space a page keeps clear for the floating top bar (desktop) or header and dock (phones). */
+export function usePagePadding() {
+  const { isWide } = useLayout();
+  const insets = useSafeAreaInsets();
+  return isWide
+    ? { top: TOP_BAR + 40, bottom: space.xxl * 2 }
+    : { top: insets.top + 68, bottom: insets.bottom + 112 };
+}
+
+// ---------- Pressables ----------
+
+type PressState = { pressed: boolean; hovered?: boolean; focused?: boolean };
+
+/**
+ * A pressable with the house feedback: scale 0.96 on press (CSS `:active` on the web so it
+ * responds the instant a finger lands, a pressed style on the phone app), hover colour
+ * only for real pointers, and transitions on exactly the properties that change.
+ */
+export function Press({
+  style,
+  feedback = 'press',
+  children,
+  ...rest
+}: Omit<PressableProps, 'style' | 'children'> & {
+  style?: (s: PressState) => StyleProp<ViewStyle>;
+  feedback?: 'press' | 'soft' | 'none';
+  children?: React.ReactNode | ((s: PressState) => React.ReactNode);
+}) {
+  const extra = isWeb && feedback !== 'none' ? { dataSet: { press: feedback === 'soft' ? 'soft' : '' } } : {};
+  return (
+    <Pressable
+      {...rest}
+      {...(extra as object)}
+      style={(s) => {
+        const st = s as PressState;
+        return [
+          transition(['scale', 'background-color', 'box-shadow', 'opacity', 'border-color'], motion.press),
+          style?.(st),
+          !isWeb && st.pressed && feedback !== 'none' ? { transform: [{ scale: feedback === 'soft' ? 0.985 : 0.96 }] } : null,
+        ];
+      }}
+    >
+      {children as React.ReactNode}
+    </Pressable>
+  );
+}
+
+// ---------- Surfaces ----------
 
 export function Card({ children, style }: { children: React.ReactNode; style?: ViewStyle }) {
   const c = useColors();
-  return (
-    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.cardBorder }, style]}>{children}</View>
-  );
+  return <View style={[styles.tile, { backgroundColor: c.card }, shadow(c, 1), style]}>{children}</View>;
 }
 
 export function SectionTitle({ children, right }: { children: string; right?: React.ReactNode }) {
   const c = useColors();
   return (
     <View style={styles.sectionRow}>
-      <Text style={[styles.sectionTitle, { color: c.textSecondary }]}>{children}</Text>
+      <Text style={[T.title, { color: c.text }]}>{children}</Text>
       {right}
     </View>
   );
 }
 
-export function ScreenHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
+export function ScreenHeader({
+  title,
+  subtitle,
+  right,
+  before,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  /** Something shown in front of the title, like month arrows */
+  before?: React.ReactNode;
+}) {
   const c = useColors();
   const { isWide } = useLayout();
   return (
-    <View style={[styles.header, isWide && styles.headerWide]}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[styles.headerTitle, isWide && styles.headerTitleWide, { color: c.text }]}>{title}</Text>
-        {subtitle ? <Text style={{ color: c.textSecondary, fontSize: 14 }}>{subtitle}</Text> : null}
+    <View style={[styles.header, !isWide && styles.headerPhone]}>
+      <View style={{ flex: 1, gap: 6, minWidth: 0 }}>
+        <View style={styles.inline}>
+          {before}
+          <Text style={[isWide ? T.display : T.displayPhone, { color: c.text }]} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+        {subtitle ? <Text style={[T.body, { color: c.textSecondary }]}>{subtitle}</Text> : null}
       </View>
       {right}
     </View>
@@ -55,41 +126,56 @@ export function ScreenHeader({ title, subtitle, right }: { title: string; subtit
 /** Scrollable page body: roomy and width-limited on desktop, compact on phones. */
 export function Page({ children }: { children: React.ReactNode }) {
   const { isWide } = useLayout();
+  const pad = usePagePadding();
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page, isWide && styles.pageWide]}>
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      style={web({ overscrollBehavior: 'contain' })}
+      contentContainerStyle={[styles.page, isWide && styles.pageWide, { paddingTop: pad.top, paddingBottom: pad.bottom }]}
+    >
       <View style={[styles.pageInner, isWide && styles.pageInnerWide]}>{children}</View>
     </ScrollView>
   );
 }
 
-/** A card with its own title bar, like a dashboard widget. */
+/** A tile with its own title bar, like a dashboard widget. */
 export function Panel({
   title,
+  subtitle,
   right,
   children,
   style,
   padded = true,
 }: {
   title?: string;
+  subtitle?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: ViewStyle | (ViewStyle | undefined | false)[];
   padded?: boolean;
 }) {
   const c = useColors();
+  const { isWide } = useLayout();
   return (
     <View
       style={[
-        styles.card,
+        styles.tile,
         styles.panel,
-        { backgroundColor: c.card, borderColor: c.cardBorder },
+        !isWide && styles.tilePhone,
+        { backgroundColor: c.card },
+        shadow(c, 1),
         !padded && { paddingHorizontal: 0 },
         style,
       ]}
     >
       {title ? (
-        <View style={[styles.panelHeader, !padded && { paddingHorizontal: space.lg }]}>
-          <Text style={[styles.panelTitle, { color: c.text }]}>{title}</Text>
+        <View style={[styles.panelHeader, !padded && { paddingHorizontal: isWide ? 24 : 18 }]}>
+          <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
+            <Text style={[T.title, { color: c.text }]} numberOfLines={1}>
+              {title}
+            </Text>
+            {subtitle ? <Text style={[T.label, { color: c.textMuted }]}>{subtitle}</Text> : null}
+          </View>
           {right}
         </View>
       ) : null}
@@ -126,7 +212,7 @@ export function Columns({
   );
 }
 
-/** Key number tile for the top of a page. */
+/** A key number: small label, the number in display type, an optional hint. */
 export function KpiCard({
   label,
   value,
@@ -144,26 +230,30 @@ export function KpiCard({
 }) {
   const c = useColors();
   const hero = tone === 'hero';
+  const fg = hero ? c.heroText : c.text;
+  const muted = hero ? c.heroMuted : c.textMuted;
   return (
     <View
       style={[
-        styles.card,
+        styles.tile,
         styles.kpi,
-        hero ? { backgroundColor: c.hero, borderColor: c.hero } : { backgroundColor: c.card, borderColor: c.cardBorder },
+        hero ? { backgroundColor: c.hero } : { backgroundColor: c.card },
+        hero ? web({ backgroundImage: 'radial-gradient(120% 140% at 90% 0%, #3AAEEA 0%, #1D5BE0 48%, #0E3597 100%)' }) : null,
+        shadow(c, hero ? 2 : 1),
       ]}
     >
-      <View style={styles.kpiLabelRow}>
+      <View style={styles.inline}>
         {swatch ? <View style={[styles.swatch, { backgroundColor: swatch }]} /> : null}
-        {icon ? <Ionicons name={icon} size={15} color={hero ? c.heroMuted : c.textMuted} /> : null}
-        <Text style={[styles.kpiLabel, { color: hero ? c.heroMuted : c.textSecondary }]} numberOfLines={1}>
+        {icon ? <Icon name={icon} size={16} color={muted} weight="bold" /> : null}
+        <Text style={[T.label, { color: muted }]} numberOfLines={1}>
           {label}
         </Text>
       </View>
-      <Text style={[styles.kpiValue, { color: hero ? c.heroText : c.text }]} numberOfLines={1} adjustsFontSizeToFit>
+      <Text style={[T.number, { color: fg, fontVariant: ['tabular-nums'] }]} numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
       {hint ? (
-        <Text style={[styles.kpiHint, { color: hero ? c.heroMuted : c.textMuted }]} numberOfLines={1}>
+        <Text style={[T.small, { color: muted }]} numberOfLines={1}>
           {hint}
         </Text>
       ) : null}
@@ -171,7 +261,7 @@ export function KpiCard({
   );
 }
 
-/** Row of KPI cards: 4 across on desktop, 2 across on phones. */
+/** Row of key numbers: across on desktop, two across on phones. */
 export function KpiRow({ children }: { children: React.ReactNode }) {
   const { isMedium } = useLayout();
   const items = React.Children.toArray(children).filter(Boolean);
@@ -186,12 +276,20 @@ export function KpiRow({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function MonthSwitcher({ month, onChange }: { month: string; onChange: (m: string) => void }) {
+// ---------- Controls ----------
+
+export function MonthSwitcher({ month, onChange, size = 'md' }: { month: string; onChange: (m: string) => void; size?: 'md' | 'lg' }) {
   const c = useColors();
+  const lg = size === 'lg';
   return (
-    <View style={[styles.monthSwitcher, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
+    <View style={[styles.monthSwitcher, { backgroundColor: c.card }, shadow(c, 1)]}>
       <IconButton icon="chevron-back" label="Previous month" onPress={() => onChange(shiftMonth(month, -1))} />
-      <Text style={[styles.monthText, { color: c.text }]}>{monthLabel(month)}</Text>
+      <Text
+        style={[lg ? T.title : { ...T.bodyStrong, fontSize: 16 }, { color: c.text, minWidth: lg ? 170 : 132, textAlign: 'center', fontVariant: ['tabular-nums'] }]}
+        accessibilityLiveRegion="polite"
+      >
+        {monthLabel(month)}
+      </Text>
       <IconButton icon="chevron-forward" label="Next month" onPress={() => onChange(shiftMonth(month, 1))} />
     </View>
   );
@@ -212,15 +310,15 @@ export function IconButton({
 }) {
   const c = useColors();
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      hitSlop={8}
-      style={({ pressed }) => [styles.iconButton, pressed && { opacity: 0.5 }]}
+      hitSlop={6}
+      style={({ hovered }) => [styles.iconButton, hovered && { backgroundColor: c.hover }]}
     >
-      <Ionicons name={icon} size={size} color={color ?? c.text} />
-    </Pressable>
+      <Icon name={icon} size={size} color={color ?? c.text} weight="bold" />
+    </Press>
   );
 }
 
@@ -237,21 +335,51 @@ export function Chip({
 }) {
   const c = useColors();
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={[
+      style={({ hovered }) => [
         styles.chip,
-        {
-          backgroundColor: selected ? c.primary : c.card,
-          borderColor: selected ? c.primary : c.cardBorder,
-        },
+        selected ? { backgroundColor: c.primary } : { backgroundColor: hovered ? c.hover : c.card },
+        !selected && ringStyle(c),
       ]}
     >
-      {icon ? <Ionicons name={icon} size={14} color={selected ? c.onPrimary : c.textSecondary} /> : null}
-      <Text style={[styles.chipText, { color: selected ? c.onPrimary : c.text }]}>{label}</Text>
-    </Pressable>
+      {icon ? <Icon name={icon} size={15} color={selected ? c.onPrimary : c.textSecondary} weight={selected ? 'fill' : 'regular'} /> : null}
+      <Text style={[T.label, { fontSize: 14, color: selected ? c.onPrimary : c.text }]}>{label}</Text>
+    </Press>
+  );
+}
+
+/** A small segmented control (All / Money in / Money out). */
+export function Segmented<K extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { key: K; label: string }[];
+  value: K;
+  onChange: (k: K) => void;
+}) {
+  const c = useColors();
+  return (
+    <View style={[styles.segment, { backgroundColor: c.track }]} accessibilityRole="tablist">
+      {options.map((o) => {
+        const on = o.key === value;
+        return (
+          <Press
+            key={o.key}
+            feedback="soft"
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            onPress={() => onChange(o.key)}
+            style={({ hovered }) => [styles.segmentItem, on ? [{ backgroundColor: c.card }, shadow(c, 1)] : hovered ? { backgroundColor: c.hover } : null]}
+          >
+            <Text style={[T.label, { fontSize: 14, color: on ? c.text : c.textSecondary }]}>{o.label}</Text>
+          </Press>
+        );
+      })}
+    </View>
   );
 }
 
@@ -261,30 +389,54 @@ export function Button({
   variant = 'primary',
   icon,
   disabled,
+  size = 'md',
 }: {
   label: string;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   icon?: IconName;
   disabled?: boolean;
+  size?: 'md' | 'sm';
 }) {
   const c = useColors();
-  const bg = variant === 'primary' ? c.primary : 'transparent';
   const fg = variant === 'primary' ? c.onPrimary : variant === 'danger' ? c.danger : c.text;
-  const border = variant === 'primary' ? c.primary : variant === 'danger' ? c.danger : c.baseline;
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={({ hovered }) => [
         styles.button,
-        { backgroundColor: bg, borderColor: border, opacity: disabled ? 0.4 : pressed ? 0.7 : 1 },
+        size === 'sm' && styles.buttonSm,
+        variant === 'primary'
+          ? [
+              { backgroundColor: hovered ? c.primaryPressed : c.primary },
+              web({ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28), 0 10px 24px -12px rgba(31,79,224,0.75)' }),
+            ]
+          : [{ backgroundColor: hovered ? c.hover : c.card }, ringStyle(c, variant === 'danger' ? c.danger : undefined)],
+        disabled && { opacity: 0.4 },
       ]}
     >
-      {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
-      <Text style={[styles.buttonText, { color: fg }]}>{label}</Text>
-    </Pressable>
+      {icon ? <Icon name={icon} size={size === 'sm' ? 16 : 18} color={fg} weight="bold" /> : null}
+      <Text style={[T.bodyStrong, { color: fg, fontSize: size === 'sm' ? 14 : 15 }, { fontFamily: 'Geist_600SemiBold' }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </Press>
+  );
+}
+
+/** Compact pill action for panel headers ("Add", "Income", ...). */
+export function SmallAction({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
+  const c = useColors();
+  return (
+    <Press
+      onPress={onPress}
+      accessibilityRole="button"
+      style={({ hovered }) => [styles.smallAction, { backgroundColor: hovered ? c.accentSoft : c.track }]}
+    >
+      <Icon name={icon} size={15} color={c.primary} weight="bold" />
+      <Text style={[T.label, { color: c.primary, fontFamily: 'Geist_600SemiBold' }]}>{label}</Text>
+    </Press>
   );
 }
 
@@ -301,25 +453,21 @@ export function Money({
 }) {
   const c = useColors();
   const color = cents > 0 ? c.positive : c.text;
-  return (
-    <Text style={[{ color, fontVariant: ['tabular-nums'] }, style]}>
-      {formatMoney(cents, currency, showPlus ? 'always' : 'auto')}
-    </Text>
-  );
+  return <Text style={[{ color, fontVariant: ['tabular-nums'] }, style]}>{formatMoney(cents, currency, showPlus ? 'always' : 'auto')}</Text>;
 }
 
 export function EmptyState({ icon, title, body }: { icon: IconName; title: string; body: string }) {
   const c = useColors();
   return (
     <View style={styles.empty}>
-      <Ionicons name={icon} size={36} color={c.textMuted} />
-      <Text style={[styles.emptyTitle, { color: c.text }]}>{title}</Text>
-      <Text style={[styles.emptyBody, { color: c.textSecondary }]}>{body}</Text>
+      {isWeb ? <OtterPortrait size={72} seed={title.length * 31} background={c.primary} /> : <Icon name={icon} size={40} color={c.textMuted} weight="duotone" duotoneColor={c.primary} />}
+      <Text style={[T.title, { color: c.text, marginTop: space.sm }]}>{title}</Text>
+      <Text style={[T.body, { color: c.textSecondary, textAlign: 'center', maxWidth: 420 }]}>{body}</Text>
     </View>
   );
 }
 
-/** Bottom sheet built on the standard Modal */
+/** Slide-over panel on desktop, bottom sheet on phones. */
 export function Sheet({
   visible,
   onClose,
@@ -334,18 +482,39 @@ export function Sheet({
   const c = useColors();
   const insets = useSafeAreaInsets();
   const { isWide } = useLayout();
+  const backdrop = (
+    <Pressable
+      style={[StyleSheet.absoluteFill, { backgroundColor: c.backdrop }, web({ backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', cursor: 'default' })]}
+      onPress={onClose}
+      accessibilityLabel="Close panel"
+    />
+  );
   if (isWide) {
-    // Desktop: a panel that slides in from the right
     return (
       <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
         <View style={styles.sideWrap}>
-          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.backdrop }]} onPress={onClose} accessibilityLabel="Close panel" />
-          <View style={[styles.sidePanel, { backgroundColor: c.card, borderLeftColor: c.hairline }]}>
-            <View style={[styles.sheetHeader, styles.sidePanelHeader, { borderBottomColor: c.hairline }]}>
-              <Text style={[styles.sheetTitle, { color: c.text }]}>{title}</Text>
+          {backdrop}
+          <View
+            style={[
+              styles.sidePanel,
+              { backgroundColor: c.card },
+              shadow(c, 3),
+              web({
+                animationKeyframes: { '0%': { transform: 'translateX(28px)', opacity: 0 }, '100%': { transform: 'translateX(0px)', opacity: 1 } },
+                animationDuration: `${motion.panel}ms`,
+                animationTimingFunction: motion.easeDrawer,
+                animationFillMode: 'both',
+              }),
+            ]}
+            accessibilityViewIsModal
+          >
+            <View style={[styles.sheetHeader, styles.sidePanelHeader]}>
+              <Text style={[T.title, { fontSize: 24, lineHeight: 30, color: c.text, flex: 1 }]} numberOfLines={1}>
+                {title}
+              </Text>
               <IconButton icon="close" label="Close" onPress={onClose} />
             </View>
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sidePanelBody}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.sidePanelBody} style={web({ overscrollBehavior: 'contain' })}>
               {children}
             </ScrollView>
           </View>
@@ -356,14 +525,16 @@ export function Sheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetWrap}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.backdrop }]} onPress={onClose} />
-        <View style={[styles.sheet, { backgroundColor: c.card, paddingBottom: insets.bottom + space.lg }]}>
+        {backdrop}
+        <View style={[styles.sheet, { backgroundColor: c.card, paddingBottom: insets.bottom + space.lg }, shadow(c, 3)]} accessibilityViewIsModal>
           <View style={[styles.grabber, { backgroundColor: c.baseline }]} />
           <View style={styles.sheetHeader}>
-            <Text style={[styles.sheetTitle, { color: c.text }]}>{title}</Text>
+            <Text style={[T.title, { fontSize: 22, color: c.text, flex: 1 }]} numberOfLines={1}>
+              {title}
+            </Text>
             <IconButton icon="close" label="Close" onPress={onClose} />
           </View>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space.lg }}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space.lg, paddingBottom: space.sm }} style={web({ overscrollBehavior: 'contain' })}>
             {children}
           </ScrollView>
         </View>
@@ -374,113 +545,119 @@ export function Sheet({
 
 export function FieldLabel({ children }: { children: string }) {
   const c = useColors();
-  return <Text style={[styles.fieldLabel, { color: c.textSecondary }]}>{children}</Text>;
+  return <Text style={[T.label, { color: c.textSecondary, marginBottom: 8 }]}>{children}</Text>;
 }
 
-export const inputStyle = (c: ReturnType<typeof useColors>): TextStyle => ({
+export const inputStyle = (c: Colors): TextStyle => ({
   borderWidth: 1,
   borderColor: c.hairline,
-  borderRadius: radius.sm,
-  paddingHorizontal: space.md,
-  paddingVertical: space.md,
+  borderRadius: radius.md,
+  // longhands, so a caller can override one side (e.g. room for a search icon)
+  paddingLeft: space.lg,
+  paddingRight: space.lg,
+  paddingTop: 13,
+  paddingBottom: 13,
   fontSize: 16,
+  fontFamily: 'Geist_400Regular',
   color: c.text,
-  backgroundColor: c.background,
+  backgroundColor: c.cardSunk,
+  ...(web({ transitionProperty: 'border-color, box-shadow', transitionDuration: '150ms' }) ?? {}),
 });
 
+/** A 1px ring drawn as a shadow (so it sits on any background) plus a soft lift. */
+export function ringStyle(c: Colors, color?: string): ViewStyle {
+  const isDarkRing = c.background === '#07122E';
+  const ring = color ? `0 0 0 1px ${color}55` : isDarkRing ? '0 0 0 1px rgba(210,222,255,0.12)' : '0 0 0 1px rgba(14,27,61,0.10)';
+  return { boxShadow: `${ring}, 0 1px 2px rgba(14,27,61,0.06)` } as ViewStyle;
+}
+
+export function useMonthLabel(month: string) {
+  return monthLabel(month);
+}
+
 const styles = StyleSheet.create({
-  card: {
+  tile: {
     borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: space.lg,
+    padding: space.xl,
   },
+  tilePhone: { padding: 18, borderRadius: 24 },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: space.xl,
-    marginBottom: space.sm,
+    marginBottom: space.xs,
   },
-  sectionTitle: { fontSize: 13, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
-    paddingTop: space.sm,
-    paddingBottom: space.lg,
+    gap: space.lg,
+    paddingBottom: space.sm,
   },
-  headerTitle: { fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
-  headerWide: { paddingTop: 0, paddingBottom: space.xl },
-  headerTitleWide: { fontSize: 28 },
-  page: { padding: space.lg, paddingBottom: 120 },
-  pageWide: { paddingHorizontal: space.xxl, paddingTop: space.xxl, paddingBottom: space.xxl },
-  pageInner: { width: '100%', gap: space.md },
-  pageInnerWide: { maxWidth: 1200, alignSelf: 'center', gap: space.lg },
-  panel: { gap: space.md },
-  panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm, minHeight: 28 },
-  panelTitle: { fontSize: 16, fontWeight: '700' },
-  columns: { flexDirection: 'row', gap: space.lg, alignItems: 'stretch' },
+  headerPhone: { alignItems: 'center', paddingBottom: 0 },
+  page: { paddingHorizontal: space.lg },
+  pageWide: { paddingHorizontal: space.xxl },
+  pageInner: { width: '100%', gap: space.lg },
+  pageInnerWide: { maxWidth: 1240, alignSelf: 'center', gap: space.xl },
+  panel: { gap: space.lg },
+  panelHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, minHeight: 32 },
+  columns: { flexDirection: 'row', gap: space.xl, alignItems: 'stretch' },
   stack: { gap: space.lg },
-  kpi: { gap: 6, padding: space.lg, height: '100%' },
-  kpiLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  kpiLabel: { fontSize: 13, fontWeight: '500' },
-  kpiValue: { fontSize: 24, fontWeight: '700', letterSpacing: -0.5, fontVariant: ['tabular-nums'] },
-  kpiHint: { fontSize: 12 },
-  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
-  swatch: { width: 8, height: 8, borderRadius: 2 },
-  sideWrap: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end' },
-  sidePanel: { width: 460, maxWidth: '100%', height: '100%', borderLeftWidth: StyleSheet.hairlineWidth },
-  sidePanelHeader: { paddingHorizontal: space.xl, paddingVertical: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  sidePanelBody: { padding: space.xl, gap: space.lg },
+  kpi: { gap: 8, height: '100%', padding: 22 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  kpiRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.lg },
+  swatch: { width: 10, height: 10, borderRadius: 3 },
+  sideWrap: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end', padding: 12 },
+  sidePanel: { width: 480, maxWidth: '100%', height: '100%', borderRadius: radius.lg, overflow: 'hidden' },
+  sidePanelHeader: { paddingHorizontal: space.xl, paddingTop: space.xl, paddingBottom: space.md },
+  sidePanelBody: { paddingHorizontal: space.xl, paddingBottom: space.xl, gap: space.lg },
   monthSwitcher: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: space.sm,
-    paddingVertical: space.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    gap: 2,
   },
-  monthText: { fontSize: 16, fontWeight: '600' },
-  iconButton: { padding: space.sm, alignItems: 'center', justifyContent: 'center' },
+  iconButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: space.md,
-    paddingVertical: space.sm,
+    paddingHorizontal: 14,
+    height: 36,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  chipText: { fontSize: 14, fontWeight: '500' },
+  segment: { flexDirection: 'row', borderRadius: radius.pill, padding: 4, gap: 2 },
+  segmentItem: { paddingHorizontal: 14, height: 34, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
-    paddingVertical: 14,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.md,
-    borderWidth: 1,
+    height: 48,
+    paddingLeft: 22,
+    paddingRight: 22,
+    borderRadius: radius.pill,
   },
-  buttonText: { fontSize: 16, fontWeight: '600' },
+  buttonSm: { height: 36, paddingLeft: 14, paddingRight: 16 },
+  smallAction: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingLeft: 10, paddingRight: 12, borderRadius: radius.pill },
   empty: { alignItems: 'center', paddingVertical: space.xxl, paddingHorizontal: space.xl, gap: space.sm },
-  emptyTitle: { fontSize: 17, fontWeight: '600', marginTop: space.sm },
-  emptyBody: { fontSize: 15, textAlign: 'center', lineHeight: 21 },
   sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   sheet: {
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     paddingHorizontal: space.lg,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
-  grabber: { width: 36, height: 4, borderRadius: 2, alignSelf: 'center', marginTop: space.sm },
+  grabber: { width: 40, height: 5, borderRadius: 3, alignSelf: 'center', marginTop: 10 },
   sheetHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
     paddingVertical: space.md,
   },
-  sheetTitle: { fontSize: 18, fontWeight: '700' },
-  fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: 6 },
 });

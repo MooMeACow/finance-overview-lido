@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, StyleSheet, Switch, TextInput, View } from 'react-native';
 
-import { Button, FieldLabel, Sheet, inputStyle, type IconName } from './ui';
-import { radius, space, useColors } from '../theme';
+import { Button, FieldLabel, Press, Sheet, inputStyle, type IconName } from './ui';
+import { radius, shadow, space, type as T, useColors } from '../theme';
+import { Text } from '../lido/Text';
+import { Icon } from '../lido/Icon';
 import { forgetOnThisDevice, setupSync, syncNow, unlockSync, type SyncState } from '../sync';
 import { ago, useSyncState } from '../sync/useSync';
 
@@ -47,22 +48,22 @@ export function SyncBanner({ onOpen }: { onOpen: () => void }) {
           ? 'Your login has expired. Reload the page to log in again.'
           : `Sync problem: ${s.message ?? 'unknown error'}`;
   return (
-    <View style={[styles.banner, { backgroundColor: c.accentSoft, borderColor: c.cardBorder }]}>
-      <Ionicons name={syncLabel(s).icon} size={18} color={c.primary} />
-      <Text style={{ flex: 1, color: c.text, fontSize: 14 }}>{text}</Text>
+    <View style={[styles.banner, { backgroundColor: c.card }, shadow(c, 2)]}>
+      <Icon name={syncLabel(s).icon} size={18} color={c.primary} weight="bold" />
+      <Text style={[T.label, { flex: 1, color: c.text, fontSize: 14 }]}>{text}</Text>
       {s.status === 'signed_out' ? (
-        <Pressable onPress={() => typeof window !== 'undefined' && window.location.reload()} style={styles.bannerAction}>
-          <Text style={{ color: c.primary, fontWeight: '700' }}>Reload</Text>
-        </Pressable>
+        <Press onPress={() => typeof window !== 'undefined' && window.location.reload()} style={({ hovered }) => [styles.bannerAction, { backgroundColor: hovered ? c.accentSoft : c.track }]}>
+          <Text style={{ color: c.primary, fontWeight: '600' }}>Reload</Text>
+        </Press>
       ) : (
-        <Pressable onPress={onOpen} style={styles.bannerAction}>
-          <Text style={{ color: c.primary, fontWeight: '700' }}>{s.status === 'error' ? 'Details' : s.status === 'setup' ? 'Set up' : 'Unlock'}</Text>
-        </Pressable>
+        <Press onPress={onOpen} style={({ hovered }) => [styles.bannerAction, { backgroundColor: hovered ? c.accentSoft : c.track }]}>
+          <Text style={{ color: c.primary, fontWeight: '600' }}>{s.status === 'error' ? 'Details' : s.status === 'setup' ? 'Set up' : 'Unlock'}</Text>
+        </Press>
       )}
       {s.status === 'setup' ? (
-        <Pressable onPress={() => setDismissed(true)} accessibilityLabel="Not now" hitSlop={8}>
-          <Ionicons name="close" size={18} color={c.textMuted} />
-        </Pressable>
+        <Press onPress={() => setDismissed(true)} accessibilityLabel="Not now" hitSlop={8} style={({ hovered }) => [styles.bannerClose, hovered && { backgroundColor: c.hover }]}>
+          <Icon name="close" size={16} color={c.textMuted} weight="bold" />
+        </Press>
       ) : null}
     </View>
   );
@@ -116,7 +117,7 @@ export function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () 
         <Text style={{ color: c.text, fontSize: 15 }}>Remember on this device</Text>
         <Text style={{ color: c.textSecondary, fontSize: 13 }}>Only on your own devices. Otherwise you'll enter it each visit.</Text>
       </View>
-      <Switch value={remember} onValueChange={setRemember} />
+      <Switch value={remember} onValueChange={setRemember} trackColor={{ false: c.baseline, true: c.primary }} thumbColor="#FFFFFF" />
     </View>
   );
 
@@ -137,7 +138,7 @@ export function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () 
 
   const errorLine = error ? (
     <View style={styles.errorRow}>
-      <Ionicons name="alert-circle" size={16} color={c.danger} />
+      <Icon name="alert-circle" size={16} color={c.danger} />
       <Text style={{ color: c.text, flex: 1 }}>{error}</Text>
     </View>
   ) : null;
@@ -150,8 +151,8 @@ export function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () 
           Your data is encrypted on this device with a passphrase before it's uploaded, so only you can read it. On your
           other devices you'll log in and enter the same passphrase.
         </Text>
-        <View style={[styles.warning, { backgroundColor: c.background, borderColor: c.hairline }]}>
-          <Ionicons name="key-outline" size={18} color={c.text} />
+        <View style={[styles.warning, { backgroundColor: c.sunSoft }]}>
+          <Icon name="key-outline" size={18} color={c.text} weight="duotone" duotoneColor={c.sun} />
           <Text style={{ color: c.text, flex: 1, fontSize: 14, lineHeight: 20 }}>
             Write your passphrase down somewhere safe. If you forget it, the synced data can't be recovered by anyone.
           </Text>
@@ -181,8 +182,8 @@ export function SyncSheet({ visible, onClose }: { visible: boolean; onClose: () 
     const label = syncLabel(s);
     body = (
       <>
-        <View style={[styles.statusCard, { backgroundColor: c.background, borderColor: c.hairline }]}>
-          {s.status === 'syncing' || s.status === 'checking' ? <ActivityIndicator /> : <Ionicons name={label.icon} size={22} color={c.primary} />}
+        <View style={[styles.statusCard, { backgroundColor: c.cardSunk }]}>
+          {s.status === 'syncing' || s.status === 'checking' ? <ActivityIndicator color={c.primary} /> : <Icon name={label.icon} size={24} color={c.primary} weight="duotone" duotoneColor={c.primary} />}
           <View style={{ flex: 1 }}>
             <Text style={{ color: c.text, fontSize: 16, fontWeight: '600' }}>{label.text}</Text>
             {s.email ? <Text style={{ color: c.textSecondary, fontSize: 13 }}>Logged in as {s.email}</Text> : null}
@@ -225,14 +226,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 6,
+    paddingLeft: space.lg,
+    paddingRight: 6,
+    borderRadius: radius.pill,
+    width: '100%',
+    maxWidth: 640,
   },
-  bannerAction: { paddingVertical: 6, paddingHorizontal: 10 },
+  bannerAction: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: radius.pill },
+  bannerClose: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   body: { fontSize: 15, lineHeight: 21 },
-  warning: { flexDirection: 'row', gap: space.sm, padding: space.md, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth },
+  warning: { flexDirection: 'row', gap: space.sm, padding: space.lg, borderRadius: radius.md },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  statusCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.md, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth },
+  statusCard: { flexDirection: 'row', alignItems: 'center', gap: space.md, padding: space.lg, borderRadius: radius.md },
 });

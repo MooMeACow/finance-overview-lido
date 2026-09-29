@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Switch, TextInput, View } from 'react-native';
 import { useDb } from '../db/provider';
 import { confirmAction, notify } from '../lib/dialogs';
 
-import { Button, FieldLabel, Money, Sheet, inputStyle } from './ui';
+import { Button, FieldLabel, Money, Sheet, inputStyle, Segmented, Text } from './ui';
 import { CategoryPicker } from './CategoryPicker';
 import { space, useColors } from '../theme';
 import { dayLabel, todayString } from '../lib/dates';
@@ -70,7 +70,7 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
             <Text style={[styles.switchLabel, { color: c.text }]}>
               Use for all “{txn.description}” transactions, now and in future imports
             </Text>
-            <Switch value={applyAll} onValueChange={setApplyAll} />
+            <Switch value={applyAll} onValueChange={setApplyAll} trackColor={{ false: c.baseline, true: c.primary }} thumbColor="#FFFFFF" />
           </View>
         ) : null}
       </View>
@@ -87,7 +87,7 @@ export function EditTransactionSheet({ txn, onClose }: { txn: Txn | null; onClos
             For moving money between your own accounts, so it isn't counted twice.
           </Text>
         </View>
-        <Switch value={excluded} onValueChange={setExcluded} />
+        <Switch value={excluded} onValueChange={setExcluded} trackColor={{ false: c.baseline, true: c.primary }} thumbColor="#FFFFFF" />
       </View>
 
       <Button label="Save" onPress={save} />
@@ -145,21 +145,18 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Add transaction">
-      <View style={styles.segment}>
-        {(['out', 'in'] as const).map((d) => (
-          <View key={d} style={{ flex: 1 }}>
-            <Button
-              label={d === 'out' ? 'Money out' : 'Money in'}
-              variant={direction === d ? 'primary' : 'secondary'}
-              onPress={() => {
-                setDirection(d);
-                if (d === 'in' && category === 'other') setCategory('income');
-                if (d === 'out' && category === 'income') setCategory('other');
-              }}
-            />
-          </View>
-        ))}
-      </View>
+      <Segmented
+        options={[
+          { key: 'out' as const, label: 'Money out' },
+          { key: 'in' as const, label: 'Money in' },
+        ]}
+        value={direction}
+        onChange={(d) => {
+          setDirection(d);
+          if (d === 'in' && category === 'other') setCategory('income');
+          if (d === 'out' && category === 'income') setCategory('other');
+        }}
+      />
       <View>
         <FieldLabel>Amount</FieldLabel>
         <TextInput
@@ -168,7 +165,7 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
           keyboardType="decimal-pad"
           placeholder="0.00"
           placeholderTextColor={c.textMuted}
-          style={[inputStyle(c), { fontSize: 24, fontWeight: '600' }]}
+          style={[inputStyle(c), { fontSize: 26, fontFamily: 'BricolageGrotesque_600SemiBold' }]}
         />
       </View>
       <View>
@@ -194,9 +191,9 @@ export function AddTransactionSheet({ visible, onClose }: { visible: boolean; on
 
 const styles = StyleSheet.create({
   summary: { gap: 4 },
-  desc: { fontSize: 18, fontWeight: '600' },
-  bigAmount: { fontSize: 28, fontWeight: '700', marginTop: space.sm },
+  desc: { fontSize: 20, lineHeight: 26, fontFamily: 'BricolageGrotesque_600SemiBold' },
+  bigAmount: { fontSize: 34, lineHeight: 40, fontFamily: 'BricolageGrotesque_700Bold', letterSpacing: -0.8, marginTop: space.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginTop: space.md },
-  switchLabel: { flex: 1, fontSize: 15 },
+  switchLabel: { flex: 1, fontSize: 15, fontFamily: 'Geist_500Medium' },
   segment: { flexDirection: 'row', gap: space.sm },
 });

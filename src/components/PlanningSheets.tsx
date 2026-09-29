@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
-import { Button, Chip, FieldLabel, Sheet, inputStyle } from './ui';
+import { Button, Chip, FieldLabel, Segmented, Sheet, Text, inputStyle } from './ui';
 import { CategoryPicker } from './CategoryPicker';
 import { space, useColors } from '../theme';
 import { useDb } from '../db/provider';
@@ -214,21 +214,18 @@ export function PlanSheet({
 
   return (
     <Sheet visible={visible} onClose={onClose} title={plan ? 'Edit plan' : isIncome ? 'Add expected income' : 'Add planned expense'}>
-      <View style={styles.row}>
-        {(['expense', 'income'] as const).map((k) => (
-          <View key={k} style={{ flex: 1 }}>
-            <Button
-              label={k === 'expense' ? 'Expense' : 'Income'}
-              variant={kind === k ? 'primary' : 'secondary'}
-              onPress={() => {
-                setKind(k);
-                if (k === 'income') setCategory('income');
-                else if (category === 'income') setCategory('other');
-              }}
-            />
-          </View>
-        ))}
-      </View>
+      <Segmented
+        options={[
+          { key: 'expense' as const, label: 'Expense' },
+          { key: 'income' as const, label: 'Income' },
+        ]}
+        value={kind}
+        onChange={(k) => {
+          setKind(k);
+          if (k === 'income') setCategory('income');
+          else if (category === 'income') setCategory('other');
+        }}
+      />
       <View>
         <FieldLabel>Description</FieldLabel>
         <TextInput
@@ -321,13 +318,14 @@ export function DebtSheet({ visible, debt, onClose }: { visible: boolean; debt: 
 
   return (
     <Sheet visible={visible} onClose={onClose} title={debt ? 'Edit debt' : 'Add debt'}>
-      <View style={styles.row}>
-        {(['owed_to_me', 'i_owe'] as const).map((d) => (
-          <View key={d} style={{ flex: 1 }}>
-            <Button label={d === 'owed_to_me' ? 'Owes me' : 'I owe'} variant={direction === d ? 'primary' : 'secondary'} onPress={() => setDirection(d)} />
-          </View>
-        ))}
-      </View>
+      <Segmented
+        options={[
+          { key: 'owed_to_me' as const, label: 'Owes me' },
+          { key: 'i_owe' as const, label: 'I owe' },
+        ]}
+        value={direction}
+        onChange={setDirection}
+      />
       <View>
         <FieldLabel>Person</FieldLabel>
         <TextInput value={person} onChangeText={setPerson} placeholder="Name" placeholderTextColor={c.textMuted} style={inputStyle(c)} />
@@ -418,6 +416,6 @@ export function BudgetSheet({
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: space.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  bigInput: { fontSize: 24, fontWeight: '600' },
-  hint: { fontSize: 13, lineHeight: 18, marginTop: 6 },
+  bigInput: { fontSize: 26, fontFamily: 'BricolageGrotesque_600SemiBold' },
+  hint: { fontSize: 13, lineHeight: 19, marginTop: 8 },
 });

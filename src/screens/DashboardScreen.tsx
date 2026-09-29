@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, View } from 'react-native';
 
-import { Columns, KpiCard, KpiRow, Page, Panel, ScreenHeader, type IconName } from '../components/ui';
-import { ForecastBars } from '../components/ForecastBars';
+import { Columns, Page, Panel, Press, SmallAction, Text, type IconName } from '../components/ui';
+import { TideChart } from '../components/TideChart';
 import { AccountSheet, BudgetSheet, DebtSheet, PlanSheet } from '../components/PlanningSheets';
-import { space, radius, useColors } from '../theme';
+import { fonts, radius, space, type as T, useColors } from '../theme';
 import { useLayout } from '../layout';
 import { useAppState } from '../state';
 import { useDb } from '../db/provider';
@@ -26,15 +25,24 @@ import {
   getPlans,
   getTransactionsAfter,
 } from '../db/database';
+import { Icon } from '../lido/Icon';
+import { BeadRope } from '../lido/BeadRope';
+import { raft } from '../lido/buses';
+import { useFirstVisit, useReducedMotion } from '../lido/motionPrefs';
+import { enter } from '../lido/web';
+import { PoolHero } from './dashboard/PoolHero';
 
 export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }) {
   const db = useDb();
   const c = useColors();
   const { currency, version, setMonth } = useAppState();
   const { isWide } = useLayout();
+  const reduced = useReducedMotion();
+  const first = useFirstVisit('dashboard');
   const today = todayString();
   const thisMonth = today.slice(0, 7);
 
+  const [loaded, setLoaded] = useState(false);
   const [accounts, setAccounts] = useState<LiveAccount[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -67,6 +75,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
       setBudgets(b);
       setSpent(s);
       setDebts(d);
+      setLoaded(true);
     })();
     return () => {
       alive = false;
@@ -79,8 +88,6 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const savingsAccounts = accounts.filter((a) => a.type === 'savings');
   const current = currentAccounts.reduce((s, a) => s + a.balance_cents, 0);
   const savings = savingsAccounts.reduce((s, a) => s + a.balance_cents, 0);
-  const share = (part: number) => (total > 0 ? `${Math.round((part / total) * 100)}% of your money` : '');
-  const countLabel = (n: number) => `${n} account${n === 1 ? '' : 's'}`;
   const forecast = useMemo(
     () => buildForecast({ startBalanceCents: total, plans, budgets, spentThisMonth: spentMap, today, months: 6 }),
     [total, plans, budgets, spentMap, today],
@@ -91,51 +98,48 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const expensePlans = plans.filter((p) => p.kind === 'expense');
   const monthlyIn = incomePlans.reduce((s, p) => s + monthlyEquivalent(p), 0);
   const monthlyOut = expensePlans.reduce((s, p) => s + monthlyEquivalent(p), 0);
-
   const lastForecast = forecast[forecast.length - 1];
+  const overBudget = budgets.filter((b) => (spentMap.get(b.category) ?? 0) > b.limit_cents).length;
+  const mood = forecast.some((r) => r.end_balance_cents < 0) ? 'low' : overBudget > 0 ? 'ok' : 'good';
+
   const openMonthly = () => {
     setMonth(thisMonth);
     onOpenMonthly();
   };
   const addPlan = (kind: 'income' | 'expense') => setPlanSheet({ open: true, plan: null, kind });
   const editPlan = (p: Plan) => setPlanSheet({ open: true, plan: p, kind: p.kind });
+  const stagger = (i: number) => (first ? enter(90 + i * 70, 10, 480, reduced) : undefined);
 
   // ---------- Sections (arranged differently on desktop and phones) ----------
 
   const forecastPanel = (
-    <Panel title="Expected balance · next 6 months" style={{ flex: 1 }}>
+    <Panel title="Expected balance" subtitle="Next 6 months, from your accounts, plans and budgets" style={{ flex: 1 }}>
       {accounts.length === 0 && plans.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }]}>
+        <Text style={[T.body, { color: c.textSecondary }]}>
           Add your accounts and your planned income and expenses, and you'll see how your money is expected to develop.
         </Text>
       ) : (
         <>
-          <ForecastBars
-            rows={forecast}
-            currency={currency}
-            selected={selectedRow.month}
-            onSelect={setSelectedForecast}
-            height={isWide ? 180 : 110}
-          />
-          <View style={[styles.detail, { backgroundColor: c.background }]}>
-            <Text style={{ color: c.text, fontWeight: '700', fontSize: 15 }}>
-              {monthLabel(selectedRow.month)}
-              {selectedRow.month === thisMonth ? ' (rest of month)' : ''}
-            </Text>
+          <TideChart rows={forecast} currency={currency} selected={selectedRow.month} onSelect={setSelectedForecast} height={isWide ? 184 : 120} />
+          <View style={[styles.detail, { backgroundColor: c.cardSunk }]}>
+            <View style={styles.between}>
+              <Text style={[T.bodyStrong, { color: c.text, fontFamily: fonts.display[600], fontSize: 16 }]}>
+                {monthLabel(selectedRow.month)}
+                {selectedRow.month === thisMonth ? ' (rest of month)' : ''}
+              </Text>
+              {isWide ? <Text style={[T.small, { color: c.textMuted }]}>Hover or click a month</Text> : null}
+            </View>
             <DetailLine label="Planned income" cents={selectedRow.income_cents} currency={currency} sign="+" />
-            <DetailLine label="Planned expenses" cents={selectedRow.expense_cents} currency={currency} sign="−" />
-            <DetailLine label="Budgeted spending" cents={selectedRow.budget_cents} currency={currency} sign="−" />
+            <DetailLine label="Planned expenses" cents={selectedRow.expense_cents} currency={currency} sign="-" />
+            <DetailLine label="Budgeted spending" cents={selectedRow.budget_cents} currency={currency} sign="-" />
             <View style={[styles.hr, { backgroundColor: c.hairline }]} />
             <View style={styles.between}>
-              <Text style={{ color: c.text, fontWeight: '600' }}>Expected balance at month end</Text>
-              <Text style={{ color: c.text, fontWeight: '700', fontVariant: ['tabular-nums'] }}>
+              <Text style={[T.bodyStrong, { color: c.text }]}>Expected balance at month end</Text>
+              <Text style={[T.bodyStrong, { color: c.text, fontFamily: fonts.ui[700], fontVariant: ['tabular-nums'] }]}>
                 {formatMoney(selectedRow.end_balance_cents, currency)}
               </Text>
             </View>
           </View>
-          <Text style={{ color: c.textMuted, fontSize: 12, lineHeight: 17 }}>
-            Estimate based on your account balances, plans and budgets. {isWide ? 'Hover or click' : 'Tap'} a month for details.
-          </Text>
         </>
       )}
     </Panel>
@@ -144,38 +148,42 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const accountsPanel = (
     <Panel
       title="Accounts"
+      subtitle={accounts.length ? `${accounts.length} account${accounts.length === 1 ? '' : 's'}` : undefined}
       style={{ flex: 1 }}
       right={<SmallAction label="Add" icon="add" onPress={() => setAccountSheet({ open: true, account: null })} />}
     >
       {accounts.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }]}>
-          Add each account (bank, savings, cash) with its current balance to see your total.
-        </Text>
+        <Text style={[T.body, { color: c.textSecondary }]}>Add each account (bank, savings, cash) with its current balance to see your total.</Text>
       ) : (
-        <View style={{ gap: space.md }}>
+        <View style={{ gap: space.lg }}>
           {[
-            { title: 'Current', list: currentAccounts, sum: current, icon: 'wallet-outline' as IconName },
-            { title: 'Savings & investments', list: savingsAccounts, sum: savings, icon: 'trending-up-outline' as IconName },
+            { title: 'Current', list: currentAccounts, sum: current, kind: 'current' as const },
+            { title: 'Savings & investments', list: savingsAccounts, sum: savings, kind: 'savings' as const },
           ]
             .filter((g) => g.list.length > 0)
             .map((g) => (
-              <View key={g.title}>
-                <View style={styles.between}>
-                  <Text style={[styles.groupTitle, { color: c.textMuted }]}>{g.title}</Text>
-                  <Text style={[styles.amount, { color: c.textSecondary, fontSize: 13 }]}>{formatMoney(g.sum, currency)}</Text>
+              <View key={g.title} style={{ gap: 2 }}>
+                <View style={[styles.between, { paddingHorizontal: 8, marginBottom: 2 }]}>
+                  <Text style={[T.label, { color: c.textMuted }]}>{g.title}</Text>
+                  <Text style={[T.label, { color: c.textSecondary, fontVariant: ['tabular-nums'] }]}>{formatMoney(g.sum, currency)}</Text>
                 </View>
-                {g.list.map((a, i) => (
-                  <HoverRow key={a.id} onPress={() => setAccountSheet({ open: true, account: a })} first={i === 0}>
-                    <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
-                      <Ionicons name={g.icon} size={16} color={c.primary} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{a.name}</Text>
-                      <Text style={[styles.rowSub, { color: c.textMuted }]} numberOfLines={1}>
+                {g.list.map((a) => (
+                  <HoverRow
+                    key={a.id}
+                    onPress={() => setAccountSheet({ open: true, account: a })}
+                    onHover={(on) => (raft.hovered = on ? a.id : raft.hovered === a.id ? null : raft.hovered)}
+                    label={`${a.name}, ${formatMoney(a.balance_cents, a.currency)}. Edit`}
+                  >
+                    <Pebble kind={g.kind} />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[T.bodyStrong, { color: c.text }]} numberOfLines={1}>
+                        {a.name}
+                      </Text>
+                      <Text style={[T.small, { color: c.textMuted }]} numberOfLines={1}>
                         {a.link
                           ? a.change_count > 0
                             ? `${formatMoney(a.change_cents, a.currency, 'always')} from statements since ${shortDate(a.updated_at, false)}`
-                            : `Auto-updates from ${linkLabel(a.link)?.split(' (')[0]} · since ${shortDate(a.updated_at, false)}`
+                            : `Auto-updates from ${linkLabel(a.link)?.split(' (')[0]} since ${shortDate(a.updated_at, false)}`
                           : `Typed in on ${shortDate(a.updated_at)}`}
                       </Text>
                     </View>
@@ -185,8 +193,8 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
               </View>
             ))}
           <View style={[styles.totalRow, { borderTopColor: c.hairline }]}>
-            <Text style={{ color: c.text, fontWeight: '700' }}>Overall total</Text>
-            <Text style={[styles.amount, { color: c.text, fontWeight: '700' }]}>{formatMoney(total, currency)}</Text>
+            <Text style={[T.bodyStrong, { color: c.text }]}>Overall total</Text>
+            <Text style={[T.number, { fontSize: 22, lineHeight: 28, color: c.text, fontVariant: ['tabular-nums'] }]}>{formatMoney(total, currency)}</Text>
           </View>
         </View>
       )}
@@ -194,20 +202,24 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   );
 
   const comingPanel = (
-    <Panel title="Coming up · next 30 days" style={{ flex: 1 }}>
+    <Panel title="Coming up" subtitle="Planned for the next 30 days" style={{ flex: 1 }}>
       {coming.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }]}>Nothing planned in the next 30 days.</Text>
+        <Text style={[T.body, { color: c.textSecondary }]}>Nothing planned in the next 30 days.</Text>
       ) : (
-        <View>
-          {coming.slice(0, 8).map((o, i) => (
-            <HoverRow key={`${o.plan.id}-${o.date}`} onPress={() => editPlan(o.plan)} first={i === 0}>
-              <View style={[styles.dateBadge, { backgroundColor: c.accentSoft }]}>
-                <Text style={{ color: c.primary, fontWeight: '700', fontSize: 15 }}>{Number(o.date.slice(8, 10))}</Text>
-                <Text style={{ color: c.primary, fontSize: 10 }}>{monthLabel(o.date.slice(0, 7), true)}</Text>
+        <View style={{ gap: 2 }}>
+          {coming.slice(0, 7).map((o) => (
+            <HoverRow key={`${o.plan.id}-${o.date}`} onPress={() => editPlan(o.plan)} label={`${o.plan.description}, ${dayLabel(o.date)}. Edit plan`}>
+              <View style={[styles.dateTile, { backgroundColor: o.plan.kind === 'income' ? c.accentSoft : c.cardSunk }]}>
+                <Text style={{ fontFamily: fonts.display[700], fontSize: 17, lineHeight: 19, color: o.plan.kind === 'income' ? c.primary : c.text }}>
+                  {Number(o.date.slice(8, 10))}
+                </Text>
+                <Text style={{ fontFamily: fonts.ui[500], fontSize: 10, lineHeight: 12, color: c.textMuted }}>{monthLabel(o.date.slice(0, 7), true)}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{o.plan.description}</Text>
-                <Text style={[styles.rowSub, { color: c.textMuted }]}>{dayLabel(o.date)}</Text>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[T.bodyStrong, { color: c.text }]} numberOfLines={1}>
+                  {o.plan.description}
+                </Text>
+                <Text style={[T.small, { color: c.textMuted }]}>{dayLabel(o.date)}</Text>
               </View>
               <PlanAmount plan={o.plan} currency={currency} />
             </HoverRow>
@@ -220,40 +232,57 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const budgetsPanel = (
     <Panel
       title="Monthly budgets"
+      subtitle={budgets.length ? `${monthLabel(thisMonth)}, ${budgets.length - overBudget} of ${budgets.length} within budget` : undefined}
       style={{ flex: 1 }}
       right={<SmallAction label="Add" icon="add" onPress={() => setBudgetSheet({ open: true, budget: null })} />}
     >
       {budgets.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }]}>
+        <Text style={[T.body, { color: c.textSecondary }]}>
           Set a monthly limit for categories like groceries or eating out to keep an eye on day-to-day spending.
         </Text>
       ) : (
-        <View style={{ gap: space.md }}>
-          {budgets.map((b) => {
+        <View style={{ gap: 6 }}>
+          {budgets.map((b, i) => {
             const used = spentMap.get(b.category) ?? 0;
             const over = used > b.limit_cents;
             const info = getCategory(b.category);
             return (
-              <Pressable key={b.category} onPress={() => setBudgetSheet({ open: true, budget: b })} style={{ gap: 6 }}>
+              <Press
+                key={b.category}
+                feedback="soft"
+                onPress={() => setBudgetSheet({ open: true, budget: b })}
+                accessibilityRole="button"
+                accessibilityLabel={`${info.label}: ${formatMoney(used, currency)} of ${formatMoney(b.limit_cents, currency)}${over ? ', over budget' : ''}. Edit budget`}
+                style={({ hovered }) => [styles.budgetRow, hovered && { backgroundColor: c.hover }]}
+              >
                 <View style={styles.between}>
                   <View style={styles.inline}>
-                    <Ionicons name={info.icon as IconName} size={16} color={c.textSecondary} />
-                    <Text style={{ color: c.text, fontSize: 15 }}>{info.label}</Text>
+                    <CategoryIcon icon={info.icon as IconName} />
+                    <Text style={[T.bodyStrong, { color: c.text }]}>{info.label}</Text>
                   </View>
-                  <Text style={{ color: c.text, fontSize: 14, fontVariant: ['tabular-nums'] }}>
-                    {formatMoney(used, currency)} <Text style={{ color: c.textMuted }}>of {formatMoney(b.limit_cents, currency)}</Text>
+                  <Text style={[T.label, { color: c.text, fontVariant: ['tabular-nums'] }]}>
+                    {formatMoney(used, currency)} <Text style={{ color: c.textMuted, fontFamily: fonts.ui[400] }}>of {formatMoney(b.limit_cents, currency)}</Text>
                   </Text>
                 </View>
-                <Progress value={used / b.limit_cents} over={over} />
+                <BeadRope value={used / b.limit_cents} animate={first && !reduced} delay={300 + i * 60} beads={isWide ? 24 : 18} />
                 {over ? (
                   <View style={styles.inline}>
-                    <Ionicons name="alert-circle" size={14} color={c.danger} />
-                    <Text style={{ color: c.text, fontSize: 12 }}>Over by {formatMoney(used - b.limit_cents, currency)}</Text>
+                    <Icon name="alert-circle" size={14} color={c.danger} />
+                    <Text style={[T.small, { color: c.text }]}>Over by {formatMoney(used - b.limit_cents, currency)}</Text>
                   </View>
                 ) : null}
-              </Pressable>
+              </Press>
             );
           })}
+          <Press
+            feedback="soft"
+            onPress={openMonthly}
+            accessibilityRole="link"
+            style={({ hovered }) => [styles.linkRow, hovered && { backgroundColor: c.hover }]}
+          >
+            <Text style={[T.label, { color: c.primary, fontFamily: fonts.ui[600] }]}>See all of {monthLabel(thisMonth).split(' ')[0]}</Text>
+            <Icon name="arrow-forward" size={15} color={c.primary} weight="bold" />
+          </Press>
         </View>
       )}
     </Panel>
@@ -262,6 +291,7 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const plansPanel = (
     <Panel
       title="Plans"
+      subtitle={plans.length ? `Per month on average: ${formatMoney(monthlyIn, currency, 'always')} in, ${formatMoney(-monthlyOut, currency)} out` : undefined}
       style={{ flex: 1 }}
       padded={!isWide}
       right={
@@ -272,22 +302,17 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
       }
     >
       {plans.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }, isWide && { paddingHorizontal: space.lg }]}>
+        <Text style={[T.body, { color: c.textSecondary }, isWide && { paddingHorizontal: 24 }]}>
           Add recurring income and expenses (salary, rent, subscriptions) and one-off plans (a trip, a new laptop).
         </Text>
       ) : isWide ? (
         <PlansTable plans={plans} currency={currency} onEdit={editPlan} />
       ) : (
-        <View style={{ gap: space.xs }}>
-          <PlanGroup title="Income" icon="arrow-down-circle-outline" plans={incomePlans} currency={currency} onEdit={editPlan} />
-          <PlanGroup title="Expenses" icon="arrow-up-circle-outline" plans={expensePlans} currency={currency} onEdit={editPlan} />
+        <View style={{ gap: space.sm }}>
+          <PlanGroup title="Income" plans={incomePlans} currency={currency} onEdit={editPlan} />
+          <PlanGroup title="Expenses" plans={expensePlans} currency={currency} onEdit={editPlan} />
         </View>
       )}
-      {plans.length > 0 ? (
-        <Text style={[styles.rowSub, { color: c.textSecondary }, isWide && { paddingHorizontal: space.lg, paddingBottom: space.xs }]}>
-          Per month on average: {formatMoney(monthlyIn, currency, 'always')} in · {formatMoney(-monthlyOut, currency)} out
-        </Text>
-      ) : null}
     </Panel>
   );
 
@@ -296,41 +321,47 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
   const debtsPanel = (
     <Panel
       title="Debts"
+      subtitle="Not counted in your total or forecast"
       style={{ flex: 1 }}
       right={<SmallAction label="Add" icon="add" onPress={() => setDebtSheet({ open: true, debt: null })} />}
     >
       {debts.length === 0 ? (
-        <Text style={[styles.body, { color: c.textSecondary }]}>Keep track of money people owe you, or that you owe.</Text>
+        <Text style={[T.body, { color: c.textSecondary }]}>Keep track of money people owe you, or that you owe.</Text>
       ) : (
-        <View style={{ gap: space.md }}>
+        <View style={{ gap: space.lg }}>
           {[
-            { title: 'Owed to you', list: owedToMe },
-            { title: 'You owe', list: iOwe },
+            { title: 'Owed to you', list: owedToMe, tint: c.accentSoft, ink: c.primary },
+            { title: 'You owe', list: iOwe, tint: c.sunSoft, ink: c.text },
           ]
             .filter((g) => g.list.length > 0)
             .map((g) => (
-              <View key={g.title}>
-                <View style={styles.between}>
-                  <Text style={{ color: c.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>{g.title}</Text>
-                  <Text style={[styles.amount, { color: c.text, fontSize: 13 }]}>
+              <View key={g.title} style={{ gap: 2 }}>
+                <View style={[styles.between, { paddingHorizontal: 8, marginBottom: 2 }]}>
+                  <Text style={[T.label, { color: c.textMuted }]}>{g.title}</Text>
+                  <Text style={[T.label, { color: c.textSecondary, fontVariant: ['tabular-nums'] }]}>
                     {formatMoney(g.list.reduce((s, d) => s + d.amount_cents, 0), currency)}
                   </Text>
                 </View>
-                {g.list.map((d, i) => (
-                  <HoverRow key={d.id} onPress={() => setDebtSheet({ open: true, debt: d })} first={i === 0}>
-                    <View style={[styles.accountIcon, { backgroundColor: c.accentSoft }]}>
-                      <Text style={{ color: c.primary, fontWeight: '700' }}>{d.person.slice(0, 1).toUpperCase()}</Text>
+                {g.list.map((d) => (
+                  <HoverRow key={d.id} onPress={() => setDebtSheet({ open: true, debt: d })} label={`${d.person}, ${formatMoney(d.amount_cents, currency)}. Edit`}>
+                    <View style={[styles.avatar, { backgroundColor: g.tint }]}>
+                      <Text style={{ fontFamily: fonts.display[700], fontSize: 16, color: g.ink }}>{d.person.slice(0, 1).toUpperCase()}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{d.person}</Text>
-                      {d.note ? <Text style={[styles.rowSub, { color: c.textMuted }]} numberOfLines={1}>{d.note}</Text> : null}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={[T.bodyStrong, { color: c.text }]} numberOfLines={1}>
+                        {d.person}
+                      </Text>
+                      {d.note ? (
+                        <Text style={[T.small, { color: c.textMuted }]} numberOfLines={1}>
+                          {d.note}
+                        </Text>
+                      ) : null}
                     </View>
                     <Text style={[styles.amount, { color: c.text }]}>{formatMoney(d.amount_cents, currency)}</Text>
                   </HoverRow>
                 ))}
               </View>
             ))}
-          <Text style={{ color: c.textMuted, fontSize: 12, lineHeight: 17 }}>Not included in your total money or forecast.</Text>
         </View>
       )}
     </Panel>
@@ -338,57 +369,42 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
 
   return (
     <Page>
-      <ScreenHeader
-        title="Dashboard"
-        subtitle={isWide ? `Your money at a glance · ${dayLabel(today)}` : undefined}
-      />
-
-      {isWide ? null : (
-        <MobileHero accounts={accounts} total={total} currency={currency} onEdit={(a) => setAccountSheet({ open: true, account: a })} />
-      )}
-      <KpiRow>
-        {isWide ? (
-          <KpiCard tone="hero" icon="wallet-outline" label="Overall total" value={formatMoney(total, currency)} hint={countLabel(accounts.length)} />
-        ) : null}
-        <KpiCard
-          icon="card-outline"
-          label="Total current"
-          value={formatMoney(current, currency)}
-          hint={currentAccounts.length === 0 ? 'No current accounts yet' : share(current) || countLabel(currentAccounts.length)}
+      <View style={stagger(0)}>
+        <PoolHero
+          accounts={accounts}
+          total={total}
+          current={current}
+          savings={savings}
+          expectedCents={lastForecast.end_balance_cents}
+          expectedMonth={lastForecast.month}
+          currency={currency}
+          mood={mood}
+          intro={first && loaded}
+          onOpenAccount={(a) => setAccountSheet({ open: true, account: a })}
+          onAddAccount={() => setAccountSheet({ open: true, account: null })}
         />
-        <KpiCard
-          icon="trending-up-outline"
-          label="Total savings"
-          value={formatMoney(savings, currency)}
-          hint={savingsAccounts.length === 0 ? 'Mark an account as savings' : share(savings) || countLabel(savingsAccounts.length)}
-        />
-        <KpiCard
-          icon="calendar-outline"
-          label="Expected in 6 months"
-          value={formatMoney(lastForecast.end_balance_cents, currency)}
-          hint={`End of ${monthLabel(lastForecast.month)}`}
-        />
-      </KpiRow>
+      </View>
 
-      <Pressable onPress={openMonthly} accessibilityRole="link" style={styles.link}>
-        <Text style={{ color: c.primary, fontSize: 13, fontWeight: '600' }}>Open monthly overview</Text>
-        <Ionicons name="chevron-forward" size={14} color={c.primary} />
-      </Pressable>
+      <View style={stagger(1)}>
+        <Columns weights={[7, 5]} breakpoint="wide">
+          {forecastPanel}
+          {accountsPanel}
+        </Columns>
+      </View>
 
-      <Columns weights={[2, 1]} breakpoint="wide">
-        {forecastPanel}
-        {isWide ? accountsPanel : null}
-      </Columns>
+      <View style={stagger(2)}>
+        <Columns weights={[5, 7]} breakpoint="wide">
+          {comingPanel}
+          {budgetsPanel}
+        </Columns>
+      </View>
 
-      <Columns>
-        {comingPanel}
-        {budgetsPanel}
-      </Columns>
-
-      <Columns weights={[2, 1]} breakpoint="wide">
-        {plansPanel}
-        {debtsPanel}
-      </Columns>
+      <View style={stagger(3)}>
+        <Columns weights={[8, 4]} breakpoint="wide">
+          {plansPanel}
+          {debtsPanel}
+        </Columns>
+      </View>
 
       <AccountSheet visible={accountSheet.open} account={accountSheet.account} onClose={() => setAccountSheet({ open: false, account: null })} />
       <PlanSheet
@@ -411,48 +427,28 @@ export function DashboardScreen({ onOpenMonthly }: { onOpenMonthly: () => void }
 
 // ---------- Pieces ----------
 
-/** Phone layout: blue card with the total and account pills. */
-function MobileHero({
-  accounts,
-  total,
-  currency,
-  onEdit,
-}: {
-  accounts: LiveAccount[];
-  total: number;
-  currency: string;
-  onEdit: (a: LiveAccount | null) => void;
-}) {
+/** The small stone or sea glass an account's otter holds, echoed in the list. */
+function Pebble({ kind }: { kind: 'current' | 'savings' }) {
   const c = useColors();
   return (
-    <View style={[styles.hero, { backgroundColor: c.hero }]}>
-      <Text style={[styles.heroLabel, { color: c.heroMuted }]}>Total money</Text>
-      <Text style={[styles.heroValue, { color: c.heroText }]}>{formatMoney(total, currency)}</Text>
-      <Text style={[styles.heroSub, { color: c.heroMuted }]}>
-        {accounts.length === 0 ? 'Add your accounts to see your total' : `Across ${accounts.length} account${accounts.length === 1 ? '' : 's'}`}
-      </Text>
-      <View style={styles.pills}>
-        {accounts.map((a) => (
-          <Pressable
-            key={a.id}
-            onPress={() => onEdit(a)}
-            accessibilityRole="button"
-            accessibilityLabel={`${a.name}: ${formatMoney(a.balance_cents, a.currency)}. Edit`}
-            style={({ pressed }) => [styles.pill, { backgroundColor: c.heroPill, opacity: pressed ? 0.7 : 1 }]}
-          >
-            <Text style={[styles.pillName, { color: c.heroMuted }]} numberOfLines={1}>{a.name}</Text>
-            <Text style={[styles.pillValue, { color: c.heroText }]}>{formatMoney(a.balance_cents, a.currency)}</Text>
-          </Pressable>
-        ))}
-        <Pressable
-          onPress={() => onEdit(null)}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.pill, styles.addPill, { borderColor: c.heroMuted, opacity: pressed ? 0.7 : 1 }]}
-        >
-          <Ionicons name="add" size={18} color={c.heroText} />
-          <Text style={[styles.pillValue, { color: c.heroText }]}>Account</Text>
-        </Pressable>
-      </View>
+    <View style={[styles.pebbleTile, { backgroundColor: kind === 'savings' ? 'rgba(63,212,245,0.14)' : c.cardSunk }]}>
+      <View
+        style={[
+          styles.pebble,
+          kind === 'savings'
+            ? { backgroundColor: '#5FCFD0', boxShadow: 'inset -2px -3px 0 rgba(20,90,110,0.35), inset 2px 2px 0 rgba(255,255,255,0.55)' }
+            : { backgroundColor: '#CDB186', boxShadow: 'inset -2px -3px 0 rgba(90,60,30,0.3), inset 2px 2px 0 rgba(255,255,255,0.5)' },
+        ]}
+      />
+    </View>
+  );
+}
+
+function CategoryIcon({ icon }: { icon: IconName }) {
+  const c = useColors();
+  return (
+    <View style={[styles.catIcon, { backgroundColor: c.track }]}>
+      <Icon name={icon} size={17} color={c.primary} weight="duotone" duotoneColor={c.primary} />
     </View>
   );
 }
@@ -463,87 +459,78 @@ function PlansTable({ plans, currency, onEdit }: { plans: Plan[]; currency: stri
   return (
     <View>
       <View style={[styles.tr, styles.th, { borderBottomColor: c.hairline }]}>
-        <Text style={[styles.thText, { color: c.textMuted, flex: 2 }]}>Description</Text>
+        <Text style={[styles.thText, { color: c.textMuted, flex: 2.2 }]}>Description</Text>
         <Text style={[styles.thText, { color: c.textMuted, flex: 1 }]}>Type</Text>
         <Text style={[styles.thText, { color: c.textMuted, flex: 2 }]}>Schedule</Text>
-        <Text style={[styles.thText, { color: c.textMuted, flex: 1.2 }]}>Category</Text>
-        <Text style={[styles.thText, { color: c.textMuted, flex: 1, textAlign: 'right' }]}>Amount</Text>
+        <Text style={[styles.thText, { color: c.textMuted, flex: 1.3 }]}>Category</Text>
+        <Text style={[styles.thText, { color: c.textMuted, flex: 1.1, textAlign: 'right' }]}>Amount</Text>
       </View>
       {plans.map((p) => (
-        <Pressable
+        <Press
           key={p.id}
+          feedback="none"
           onPress={() => onEdit(p)}
-          style={(state) => [
-            styles.tr,
-            { borderBottomColor: c.hairline },
-            (state as { hovered?: boolean }).hovered && { backgroundColor: c.track },
-          ]}
+          accessibilityRole="button"
+          accessibilityLabel={`${p.description}, ${frequencyLabel(p)}. Edit plan`}
+          style={({ hovered }) => [styles.tr, { borderBottomColor: c.hairline }, hovered && { backgroundColor: c.hover }]}
         >
-          <Text style={[styles.td, { color: c.text, flex: 2, fontWeight: '500' }]} numberOfLines={1}>{p.description}</Text>
-          <Text style={[styles.td, { color: c.textSecondary, flex: 1 }]}>{p.kind === 'income' ? 'Income' : 'Expense'}</Text>
-          <Text style={[styles.td, { color: c.textSecondary, flex: 2 }]} numberOfLines={1}>{frequencyLabel(p)}</Text>
-          <Text style={[styles.td, { color: c.textSecondary, flex: 1.2 }]} numberOfLines={1}>{p.kind === 'income' ? '—' : getCategory(p.category).label}</Text>
-          <View style={{ flex: 1, alignItems: 'flex-end' }}>
+          <Text style={[styles.td, { color: c.text, flex: 2.2, fontFamily: fonts.ui[500] }]} numberOfLines={1}>
+            {p.description}
+          </Text>
+          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+            <View style={[styles.tag, { backgroundColor: p.kind === 'income' ? c.accentSoft : c.cardSunk }]}>
+              <Text style={{ fontFamily: fonts.ui[500], fontSize: 12, color: p.kind === 'income' ? c.primary : c.textSecondary }}>{p.kind === 'income' ? 'Income' : 'Expense'}</Text>
+            </View>
+          </View>
+          <Text style={[styles.td, { color: c.textSecondary, flex: 2 }]} numberOfLines={1}>
+            {frequencyLabel(p)}
+          </Text>
+          <Text style={[styles.td, { color: c.textSecondary, flex: 1.3 }]} numberOfLines={1}>
+            {p.kind === 'income' ? '-' : getCategory(p.category).label}
+          </Text>
+          <View style={{ flex: 1.1, alignItems: 'flex-end' }}>
             <PlanAmount plan={p} currency={currency} />
           </View>
-        </Pressable>
+        </Press>
       ))}
     </View>
   );
 }
 
-/** A list row with a hover highlight on the web. */
-function HoverRow({ children, onPress, first }: { children: React.ReactNode; onPress: () => void; first?: boolean }) {
+/** A list row with a hover tint on the web. */
+function HoverRow({
+  children,
+  onPress,
+  onHover,
+  label,
+}: {
+  children: React.ReactNode;
+  onPress: () => void;
+  onHover?: (on: boolean) => void;
+  label?: string;
+}) {
   const c = useColors();
   return (
-    <Pressable
+    <Press
+      feedback="soft"
       onPress={onPress}
-      style={(state) => [
-        styles.listRow,
-        !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.hairline },
-        (state as { hovered?: boolean }).hovered && { backgroundColor: c.track },
-        state.pressed && { opacity: 0.6 },
-      ]}
+      onHoverIn={onHover ? () => onHover(true) : undefined}
+      onHoverOut={onHover ? () => onHover(false) : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ hovered }) => [styles.listRow, hovered && { backgroundColor: c.hover }]}
     >
       {children}
-    </Pressable>
+    </Press>
   );
 }
 
-function SmallAction({ label, icon, onPress }: { label: string; icon: IconName; onPress: () => void }) {
-  const c = useColors();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      style={(state) => [
-        styles.smallAction,
-        { borderColor: c.hairline },
-        (state as { hovered?: boolean }).hovered && { backgroundColor: c.accentSoft, borderColor: c.accentSoft },
-      ]}
-    >
-      <Ionicons name={icon} size={15} color={c.primary} />
-      <Text style={{ color: c.primary, fontSize: 13, fontWeight: '600' }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function Progress({ value, over }: { value: number; over?: boolean }) {
-  const c = useColors();
-  const pct = Math.max(0, Math.min(1, value)) * 100;
-  return (
-    <View style={[styles.track, { backgroundColor: c.track }]}>
-      <View style={[styles.fill, { width: `${pct}%` as `${number}%`, backgroundColor: over ? c.danger : c.primary }]} />
-    </View>
-  );
-}
-
-function DetailLine({ label, cents, currency, sign }: { label: string; cents: number; currency: string; sign: '+' | '−' }) {
+function DetailLine({ label, cents, currency, sign }: { label: string; cents: number; currency: string; sign: '+' | '-' }) {
   const c = useColors();
   return (
     <View style={styles.between}>
-      <Text style={{ color: c.textSecondary, fontSize: 14 }}>{label}</Text>
-      <Text style={{ color: c.text, fontSize: 14, fontVariant: ['tabular-nums'] }}>
+      <Text style={[T.label, { fontSize: 14, color: c.textSecondary, fontFamily: fonts.ui[400] }]}>{label}</Text>
+      <Text style={[T.label, { fontSize: 14, color: c.text, fontVariant: ['tabular-nums'] }]}>
         {cents === 0 ? formatMoney(0, currency) : `${sign}${formatMoney(cents, currency)}`}
       </Text>
     </View>
@@ -554,40 +541,25 @@ function PlanAmount({ plan, currency }: { plan: Plan; currency: string }) {
   const c = useColors();
   const income = plan.kind === 'income';
   return (
-    <Text style={[styles.amount, { color: income ? c.positive : c.text }]}>
-      {formatMoney(income ? plan.amount_cents : -plan.amount_cents, currency, 'always')}
-    </Text>
+    <Text style={[styles.amount, { color: income ? c.positive : c.text }]}>{formatMoney(income ? plan.amount_cents : -plan.amount_cents, currency, 'always')}</Text>
   );
 }
 
-function PlanGroup({
-  title,
-  icon,
-  plans,
-  currency,
-  onEdit,
-}: {
-  title: string;
-  icon: IconName;
-  plans: Plan[];
-  currency: string;
-  onEdit: (p: Plan) => void;
-}) {
+function PlanGroup({ title, plans, currency, onEdit }: { title: string; plans: Plan[]; currency: string; onEdit: (p: Plan) => void }) {
   const c = useColors();
   if (plans.length === 0) return null;
   return (
-    <View>
-      <View style={[styles.inline, { paddingTop: space.sm }]}>
-        <Ionicons name={icon} size={15} color={c.textMuted} />
-        <Text style={{ color: c.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 }}>{title}</Text>
-      </View>
-      {plans.map((p, i) => (
-        <HoverRow key={p.id} onPress={() => onEdit(p)} first={i === 0}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>{p.description}</Text>
-            <Text style={[styles.rowSub, { color: c.textMuted }]} numberOfLines={1}>
+    <View style={{ gap: 2 }}>
+      <Text style={[T.label, { color: c.textMuted, paddingHorizontal: 8, marginTop: space.xs }]}>{title}</Text>
+      {plans.map((p) => (
+        <HoverRow key={p.id} onPress={() => onEdit(p)} label={`${p.description}. Edit plan`}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={[T.bodyStrong, { color: c.text }]} numberOfLines={1}>
+              {p.description}
+            </Text>
+            <Text style={[T.small, { color: c.textMuted }]} numberOfLines={1}>
               {frequencyLabel(p)}
-              {p.kind === 'expense' ? ` · ${getCategory(p.category).label}` : ''}
+              {p.kind === 'expense' ? `, ${getCategory(p.category).label}` : ''}
             </Text>
           </View>
           <PlanAmount plan={p} currency={currency} />
@@ -598,34 +570,23 @@ function PlanGroup({
 }
 
 const styles = StyleSheet.create({
-  groupTitle: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-  body: { fontSize: 15, lineHeight: 21 },
-  hero: { borderRadius: radius.lg, padding: space.xl, gap: 4 },
-  heroLabel: { fontSize: 14, fontWeight: '500' },
-  heroValue: { fontSize: 40, fontWeight: '700', letterSpacing: -1 },
-  heroSub: { fontSize: 13 },
-  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.lg },
-  pill: { borderRadius: radius.md, paddingVertical: space.sm, paddingHorizontal: space.md, minWidth: 96 },
-  addPill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderStyle: 'dashed', justifyContent: 'center' },
-  pillName: { fontSize: 12 },
-  pillValue: { fontSize: 15, fontWeight: '600' },
-  link: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-end' },
-  inline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
-  track: { height: 8, borderRadius: 4, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 4 },
-  detail: { borderRadius: radius.md, padding: space.md, gap: 6 },
-  hr: { height: StyleSheet.hairlineWidth, marginVertical: 2 },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.xs, borderRadius: 8 },
-  rowTitle: { fontSize: 15, fontWeight: '500' },
-  rowSub: { fontSize: 13 },
-  amount: { fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  dateBadge: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  accountIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: StyleSheet.hairlineWidth, paddingTop: space.md, marginTop: space.xs, paddingHorizontal: space.xs },
-  smallAction: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth },
-  tr: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  th: { paddingVertical: space.sm },
-  thText: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-  td: { fontSize: 14 },
+  detail: { borderRadius: radius.md, padding: space.lg, gap: 8 },
+  hr: { height: 1, marginVertical: 2 },
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 10, paddingHorizontal: 8, borderRadius: radius.sm },
+  amount: { fontFamily: fonts.ui[600], fontSize: 15, fontVariant: ['tabular-nums'] },
+  dateTile: { width: 46, height: 46, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  pebbleTile: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  pebble: { width: 20, height: 15, borderRadius: 8 },
+  catIcon: { width: 32, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  budgetRow: { gap: 10, paddingVertical: 10, paddingHorizontal: 8, borderRadius: radius.sm },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 10, borderRadius: radius.pill, marginTop: 2 },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, paddingTop: space.lg, paddingHorizontal: 8 },
+  tr: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 12, paddingHorizontal: 24, borderBottomWidth: 1 },
+  th: { paddingVertical: 8 },
+  thText: { fontFamily: fonts.ui[500], fontSize: 12, letterSpacing: 0.2 },
+  td: { fontFamily: fonts.ui[400], fontSize: 14 },
+  tag: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999 },
 });

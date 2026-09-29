@@ -1,21 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, View } from 'react-native';
 
-import { space, useColors } from '../theme';
+import { fonts, radius, space, useColors } from '../theme';
 import { getCategory } from '../lib/categories';
 import { formatMoney } from '../lib/money';
 import { shortDate } from '../lib/dates';
 import type { Txn } from '../db/database';
-import type { IconName } from './ui';
+import { Press, Text, type IconName } from './ui';
+import { Icon } from '../lido/Icon';
 
 type SortKey = 'date' | 'description' | 'category' | 'amount';
 type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 
 const COLUMNS: { key: SortKey; label: string; flex: number; align?: 'right' }[] = [
-  { key: 'date', label: 'Date', flex: 1 },
+  { key: 'date', label: 'Date', flex: 0.9 },
   { key: 'description', label: 'Description', flex: 3 },
-  { key: 'category', label: 'Category', flex: 1.6 },
+  { key: 'category', label: 'Category', flex: 1.7 },
   { key: 'amount', label: 'Amount', flex: 1.2, align: 'right' },
 ];
 
@@ -51,20 +51,21 @@ export function TransactionsTable({ txns, onEdit }: { txns: Txn[]; onEdit: (t: T
         {COLUMNS.map((col) => {
           const active = sort.key === col.key;
           return (
-            <Pressable
+            <Press
               key={col.key}
+              feedback="soft"
               onPress={() => toggle(col.key)}
               accessibilityRole="button"
               accessibilityLabel={`Sort by ${col.label}`}
-              style={[styles.thCell, { flex: col.flex, justifyContent: col.align === 'right' ? 'flex-end' : 'flex-start' }]}
+              style={({ hovered }) => [
+                styles.thCell,
+                { flex: col.flex, justifyContent: col.align === 'right' ? 'flex-end' : 'flex-start' },
+                hovered && { backgroundColor: c.hover },
+              ]}
             >
               <Text style={[styles.thText, { color: active ? c.text : c.textMuted }]}>{col.label}</Text>
-              <Ionicons
-                name={active ? (sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'swap-vertical'}
-                size={12}
-                color={active ? c.text : c.baseline}
-              />
-            </Pressable>
+              <Icon name={active ? (sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : 'swap-vertical'} size={12} color={active ? c.primary : c.baseline} weight="bold" />
+            </Press>
           );
         })}
       </View>
@@ -73,28 +74,29 @@ export function TransactionsTable({ txns, onEdit }: { txns: Txn[]; onEdit: (t: T
         const cat = getCategory(t.category);
         const excluded = t.excluded === 1;
         return (
-          <Pressable
+          <Press
             key={t.id}
+            feedback="none"
             onPress={() => onEdit(t)}
-            style={(state) => [
-              styles.tr,
-              { borderBottomColor: c.hairline },
-              (state as { hovered?: boolean }).hovered && { backgroundColor: c.track },
-            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${t.description}, ${formatMoney(t.amount_cents, t.currency, 'always')}. Edit`}
+            style={({ hovered }) => [styles.tr, { borderBottomColor: c.hairline }, hovered && { backgroundColor: c.hover }]}
           >
-            <Text style={[styles.td, { flex: 1, color: c.textSecondary }]}>{shortDate(t.date, false)}</Text>
+            <Text style={[styles.td, { flex: 0.9, color: c.textSecondary, fontVariant: ['tabular-nums'] }]}>{shortDate(t.date, false)}</Text>
             <View style={{ flex: 3, minWidth: 0 }}>
-              <Text style={[styles.td, { color: c.text, fontWeight: '500' }]} numberOfLines={1}>
+              <Text style={[styles.td, { color: c.text, fontFamily: fonts.ui[500] }]} numberOfLines={1}>
                 {t.description}
               </Text>
               {t.note || excluded ? (
-                <Text style={{ color: c.textMuted, fontSize: 12 }} numberOfLines={1}>
-                  {[excluded ? 'Not counted in totals' : null, t.note].filter(Boolean).join(' · ')}
+                <Text style={{ color: c.textMuted, fontSize: 12, fontFamily: fonts.ui[400] }} numberOfLines={1}>
+                  {[excluded ? 'Not counted in totals' : null, t.note].filter(Boolean).join(', ')}
                 </Text>
               ) : null}
             </View>
-            <View style={[styles.catCell, { flex: 1.6 }]}>
-              <Ionicons name={cat.icon as IconName} size={14} color={c.textMuted} />
+            <View style={[styles.catCell, { flex: 1.7 }]}>
+              <View style={[styles.catIcon, { backgroundColor: c.track }]}>
+                <Icon name={cat.icon as IconName} size={14} color={c.primary} weight="duotone" duotoneColor={c.primary} />
+              </View>
               <Text style={[styles.td, { color: c.textSecondary }]} numberOfLines={1}>
                 {cat.label}
               </Text>
@@ -109,7 +111,7 @@ export function TransactionsTable({ txns, onEdit }: { txns: Txn[]; onEdit: (t: T
             >
               {formatMoney(t.amount_cents, t.currency, 'always')}
             </Text>
-          </Pressable>
+          </Press>
         );
       })}
     </View>
@@ -121,14 +123,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 11,
+    paddingHorizontal: space.xl,
+    borderBottomWidth: 1,
   },
-  th: { paddingVertical: space.sm },
-  thCell: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  thText: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
-  td: { fontSize: 14 },
-  catCell: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
-  amount: { textAlign: 'right', fontWeight: '600', fontVariant: ['tabular-nums'] },
+  th: { paddingVertical: 6 },
+  thCell: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, marginHorizontal: -8, paddingHorizontal: 8, borderRadius: radius.xs },
+  thText: { fontFamily: fonts.ui[500], fontSize: 12, letterSpacing: 0.2 },
+  td: { fontFamily: fonts.ui[400], fontSize: 14 },
+  catCell: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+  catIcon: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  amount: { textAlign: 'right', fontFamily: fonts.ui[600], fontVariant: ['tabular-nums'] },
 });

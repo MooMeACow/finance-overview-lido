@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useDb } from '../db/provider';
 import { confirmAction, notify } from '../lib/dialogs';
 import { readPickedFile } from '../lib/readPickedFile';
 
-import { Button, Card, Chip, FieldLabel, IconButton, Page, ScreenHeader, SectionTitle, inputStyle } from '../components/ui';
+import { Button, Card, Chip, FieldLabel, IconButton, Page, ScreenHeader, SectionTitle, Text, inputStyle } from '../components/ui';
 import { useLayout } from '../layout';
-import { space, useColors } from '../theme';
+import { fonts, radius, space, type as T, useColors } from '../theme';
+import { Icon } from '../lido/Icon';
+import { web } from '../lido/web';
+import { isDemo } from '../lido/demo';
 import { useAppState } from '../state';
 import { type Table, toTable } from '../lib/csv';
 import { DATE_FORMATS, dayLabel, shortDate } from '../lib/dates';
@@ -223,22 +226,43 @@ export function ImportScreen({ onDone, onOpenSync }: { onDone: () => void; onOpe
       {setup ? (
         <SetupPreview setup={setup} busy={busy} onImport={importSetup} onCancel={reset} />
       ) : !loaded ? (
-        <Card style={{ gap: space.md }}>
-          <Text style={[styles.lead, { color: c.text }]}>Add a bank statement</Text>
-          <Text style={[styles.body, { color: c.textSecondary }]}>
-            Export your transactions as a CSV file from your bank's app or website, then choose it here. Revolut
-            and ING statements are recognised automatically; for other banks you can tell the app which column is which.
-            Importing the same file twice won't create duplicates. You can also choose a plans file (.json) to add
-            plans, budgets and debts in one go.
-          </Text>
-          <Button label={busy ? 'Opening…' : 'Choose file'} icon="document-attach-outline" onPress={pickFile} disabled={busy} />
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <View style={[styles.entry, !isWide && { flexDirection: 'column' }]}>
+            <View style={[styles.entryArt, !isWide && { width: '100%', height: 150 }]}>
+              <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1766E0' }, web({ backgroundImage: 'radial-gradient(120% 110% at 80% 0%, #46C4F0 0%, #1766E0 50%, #0A3A9E 100%)' })]} />
+              <View style={[styles.entryIcon, web({ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3)' })]}>
+                <Icon name="document-attach-outline" size={40} color="#FFF8EC" weight="duotone" duotoneColor="#FFF8EC" />
+              </View>
+            </View>
+            <View style={styles.entryBody}>
+              <Text style={[T.title, { fontSize: 24, lineHeight: 30, color: c.text }]}>Add a bank statement</Text>
+              <Text style={[T.body, { color: c.textSecondary, maxWidth: 560 }]}>
+                Export your transactions as a CSV file from your bank's app or website, then choose it here. Revolut and ING
+                statements are recognised automatically; for other banks you tell the app which column is which. Importing the
+                same file twice won't create duplicates.
+              </Text>
+              <View style={styles.formats}>
+                {['ING', 'Revolut', 'Any bank CSV', 'Plans file (.json)', 'Backup'].map((f) => (
+                  <View key={f} style={[styles.format, { backgroundColor: c.track }]}>
+                    <Text style={[T.small, { color: c.textSecondary, fontFamily: fonts.ui[500] }]}>{f}</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ alignSelf: 'flex-start' }}>
+                <Button label={busy ? 'Opening...' : 'Choose file'} icon="document-attach-outline" onPress={pickFile} disabled={busy} />
+              </View>
+            </View>
+          </View>
         </Card>
       ) : (
         <>
           <Card style={{ gap: space.xs }}>
             <View style={styles.fileRow}>
+              <View style={[styles.fileIcon, { backgroundColor: c.accentSoft }]}>
+                <Icon name="document-text-outline" size={22} color={c.primary} weight="duotone" duotoneColor={c.primary} />
+              </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.lead, { color: c.text }]} numberOfLines={1}>{loaded.fileName}</Text>
+                <Text style={[T.title, { color: c.text }]} numberOfLines={1}>{loaded.fileName}</Text>
                 <Text style={[styles.body, { color: c.textSecondary }]}>
                   {SOURCE_LABEL[loaded.source]} · {loaded.table.rows.length} rows
                 </Text>
@@ -324,25 +348,32 @@ export function ImportScreen({ onDone, onOpenSync }: { onDone: () => void; onOpe
         <>
           <SectionTitle>Your data</SectionTitle>
           <Card style={{ gap: space.md }}>
-            <Text style={[styles.body, { color: c.textSecondary }]}>
-              {Platform.OS !== 'web'
+            <View style={styles.dataRow}>
+              <View style={[styles.fileIcon, { backgroundColor: c.accentSoft }]}>
+                <Icon name="lock-closed-outline" size={20} color={c.primary} weight="duotone" duotoneColor={c.primary} />
+              </View>
+            <Text style={[styles.body, { color: c.textSecondary, flex: 1 }]}>
+              {isDemo
+                ? 'This is a demo with a made-up year of finances. Anything you change or import stays in this browser only.'
+                : Platform.OS !== 'web'
                 ? 'Everything is stored only on this device. Nothing is uploaded anywhere.'
                 : sync.status === 'unavailable'
                   ? 'Everything is stored only in this browser. Sync between devices works on the hosted version of the app.'
                   : 'A copy is kept in this browser so the app also works offline. With sync on, it is encrypted with your passphrase and kept in step with your other devices.'}
             </Text>
+            </View>
             {Platform.OS === 'web' && sync.status !== 'unavailable' ? (
               <Button label={syncLabel(sync).text} variant="secondary" icon={syncLabel(sync).icon} onPress={onOpenSync} />
             ) : null}
+            <View style={[styles.dataButtons, !isWide && { flexDirection: 'column' }]}>
+              {backupSupported ? <Button label="Download backup" variant="secondary" icon="download-outline" onPress={downloadBackup} /> : null}
+              <Button label="Delete all data" variant="danger" icon="trash-outline" onPress={wipe} />
+            </View>
             {backupSupported ? (
-              <>
-                <Button label="Download backup" variant="secondary" icon="download-outline" onPress={downloadBackup} />
-                <Text style={[styles.small, { color: c.textMuted }]}>
-                  The backup file isn't encrypted, so keep it somewhere private. To restore it, choose it with "Choose file" above.
-                </Text>
-              </>
+              <Text style={[styles.small, { color: c.textMuted }]}>
+                The backup file isn't encrypted, so keep it somewhere private. To restore it, choose it with "Choose file" above.
+              </Text>
             ) : null}
-            <Button label="Delete all data" variant="danger" icon="trash-outline" onPress={wipe} />
           </Card>
         </>
       ) : null}
@@ -379,8 +410,11 @@ function SetupPreview({
     <>
       <Card style={{ gap: space.xs }}>
         <View style={styles.fileRow}>
+          <View style={[styles.fileIcon, { backgroundColor: c.accentSoft }]}>
+            <Icon name="calendar-outline" size={22} color={c.primary} weight="duotone" duotoneColor={c.primary} />
+          </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.lead, { color: c.text }]} numberOfLines={1}>{setup.fileName}</Text>
+            <Text style={[T.title, { color: c.text }]} numberOfLines={1}>{setup.fileName}</Text>
             <Text style={[styles.body, { color: c.textSecondary }]}>
               Plans file · {plans.length} plans, {budgets.length} budgets, {debts.length} debts to add
             </Text>
@@ -440,10 +474,10 @@ function SetupPreview({
 const SOURCE_SHORT: Record<string, string> = { revolut: 'Revolut', ing: 'ING', csv: 'CSV', manual: 'Manual' };
 
 function period(imp: ImportSummary): string {
-  if (!imp.first_date || !imp.last_date) return '—';
+  if (!imp.first_date || !imp.last_date) return '-';
   const a = shortDate(imp.first_date);
   const b = shortDate(imp.last_date);
-  return a === b ? a : `${a} – ${b}`;
+  return a === b ? a : `${a} to ${b}`;
 }
 
 /** All imported statements with their period and totals; delete removes their transactions. */
@@ -461,7 +495,7 @@ function ImportedStatements({ imports, onDelete }: { imports: ImportSummary[]; o
 
   const badge = (source: string) => (
     <View style={[styles.badge, { backgroundColor: c.accentSoft }]}>
-      <Text style={{ color: c.primary, fontSize: 12, fontWeight: '700' }}>{SOURCE_SHORT[source] ?? source}</Text>
+      <Text style={{ color: c.primary, fontSize: 12, fontFamily: fonts.ui[600] }}>{SOURCE_SHORT[source] ?? source}</Text>
     </View>
   );
 
@@ -517,7 +551,7 @@ function PreviewStat({ label, value }: { label: string; value: string }) {
   const c = useColors();
   return (
     <View style={{ flex: 1 }}>
-      <Text style={{ color: c.text, fontSize: 22, fontWeight: '700' }}>{value}</Text>
+      <Text style={[T.number, { color: c.text, fontVariant: ['tabular-nums'] }]}>{value}</Text>
       <Text style={{ color: c.textSecondary, fontSize: 12 }}>{label}</Text>
     </View>
   );
@@ -541,7 +575,7 @@ function MappingEditor({ table, mapping, onChange }: { table: Table; mapping: Ma
         ))}
       </ScrollView>
       <Text style={[styles.small, { color: c.textMuted, marginTop: 4 }]} numberOfLines={1}>
-        e.g. {table.rows[0]?.[value] ?? '—'}
+        e.g. {table.rows[0]?.[value] ?? '-'}
       </Text>
     </View>
   );
@@ -567,6 +601,8 @@ function MappingEditor({ table, mapping, onChange }: { table: Table; mapping: Ma
           <Switch
             value={mapping.direction !== null}
             onValueChange={(on) => set({ direction: on ? 0 : null, outValue: '' })}
+            trackColor={{ false: c.baseline, true: c.primary }}
+            thumbColor="#FFFFFF"
           />
         </View>
         {mapping.direction !== null ? (
@@ -598,18 +634,27 @@ function MappingEditor({ table, mapping, onChange }: { table: Table; mapping: Ma
 }
 
 const styles = StyleSheet.create({
-  readable: { maxWidth: 1000 },
+  readable: { maxWidth: 1040, gap: space.lg },
   lead: { fontSize: 17, fontWeight: '600' },
-  body: { fontSize: 15, lineHeight: 21 },
-  small: { fontSize: 13 },
-  fileRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  body: { fontSize: 15, lineHeight: 22 },
+  small: { fontSize: 13, lineHeight: 18 },
+  fileRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  fileIcon: { width: 44, height: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  entry: { flexDirection: 'row', alignItems: 'stretch' },
+  entryArt: { width: 220, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  entryIcon: { width: 84, height: 84, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,248,236,0.16)' },
+  entryBody: { flex: 1, padding: space.xl, gap: space.md },
+  formats: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  format: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill },
+  dataRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  dataButtons: { flexDirection: 'row', gap: space.md },
   previewStats: { flexDirection: 'row' },
   previewRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  hr: { height: StyleSheet.hairlineWidth },
+  hr: { height: 1 },
   importRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: space.md, paddingHorizontal: space.lg, gap: space.md },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
-  tr: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.lg, borderBottomWidth: StyleSheet.hairlineWidth },
-  th: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: radius.pill },
+  tr: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: 12, paddingHorizontal: space.xl, borderBottomWidth: 1 },
+  th: { fontSize: 12, fontFamily: fonts.ui[500], letterSpacing: 0.2 },
   td: { fontSize: 14 },
   num: { textAlign: 'right', fontVariant: ['tabular-nums'] },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

@@ -1,32 +1,42 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { space, useColors } from '../theme';
+import { fonts, space } from '../theme';
+import { Text } from '../lido/Text';
+import { web } from '../lido/web';
 
 export type TooltipLine = { label: string; value: string; swatch?: string; strong?: boolean };
 
 /**
- * Small floating box shown above a chart column while the mouse hovers it.
- * Values stay in text color; a swatch beside each line carries the series identity.
+ * Small floating card above a chart column while the mouse hovers it. Always ink-dark with
+ * cream text, so it reads the same over light and dark pages. Values stay in text colour; a
+ * swatch beside each line carries the series identity.
  */
 export function ChartTooltip({ title, lines, align = 'center' }: { title: string; lines: TooltipLine[]; align?: 'left' | 'center' | 'right' }) {
-  const c = useColors();
-  const pos = align === 'left' ? { left: 0 } : align === 'right' ? { right: 0 } : { left: '50%' as const, transform: [{ translateX: -80 }] };
+  const pos = align === 'left' ? { left: 0 } : align === 'right' ? { right: 0 } : { left: '50%' as const, marginLeft: -88 };
   return (
     <View
-      pointerEvents="none"
-      style={[
+      style={[{ pointerEvents: 'none' },
         styles.box,
         pos,
-        { backgroundColor: c.card, borderColor: c.hairline, shadowColor: '#000' },
+        web({
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          boxShadow: '0 14px 34px -14px rgba(0,6,24,0.7), inset 0 1px 0 rgba(255,255,255,0.1)',
+          animationKeyframes: { '0%': { opacity: 0, transform: 'translateY(4px) scale(0.97)' }, '100%': { opacity: 1, transform: 'translateY(0px) scale(1)' } },
+          animationDuration: '130ms',
+          animationTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
+          animationFillMode: 'both',
+          transformOrigin: '50% 100%',
+        }),
       ]}
     >
-      <Text style={[styles.title, { color: c.text }]}>{title}</Text>
+      <Text style={styles.title}>{title}</Text>
       {lines.map((l) => (
         <View key={l.label} style={styles.line}>
           {l.swatch ? <View style={[styles.swatch, { backgroundColor: l.swatch }]} /> : null}
-          <Text style={[styles.label, { color: c.textSecondary }]}>{l.label}</Text>
-          <Text style={[styles.value, { color: c.text, fontWeight: l.strong ? '700' : '600' }]}>{l.value}</Text>
+          <Text style={styles.label}>{l.label}</Text>
+          <Text style={[styles.value, { fontFamily: l.strong ? fonts.ui[700] : fonts.ui[600] }]}>{l.value}</Text>
         </View>
       ))}
     </View>
@@ -37,21 +47,17 @@ const styles = StyleSheet.create({
   box: {
     position: 'absolute',
     bottom: '100%',
-    marginBottom: 6,
-    width: 160,
-    padding: space.sm,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
+    marginBottom: 8,
+    width: 176,
+    padding: 12,
+    borderRadius: 14,
+    gap: 5,
     zIndex: 10,
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    backgroundColor: 'rgba(6,17,46,0.92)',
   },
-  title: { fontSize: 12, fontWeight: '700', marginBottom: 2 },
-  line: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  title: { fontFamily: fonts.display[600], fontSize: 14, lineHeight: 18, color: '#FFF8EC', marginBottom: 2 },
+  line: { flexDirection: 'row', alignItems: 'center', gap: space.sm - 2 },
   swatch: { width: 8, height: 8, borderRadius: 2 },
-  label: { fontSize: 12, flex: 1 },
-  value: { fontSize: 12, fontVariant: ['tabular-nums'] },
+  label: { fontFamily: fonts.ui[400], fontSize: 12, flex: 1, color: 'rgba(255,248,236,0.72)' },
+  value: { fontSize: 12, color: '#FFF8EC', fontVariant: ['tabular-nums'] },
 });
