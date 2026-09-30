@@ -37,16 +37,19 @@ export function OtterRaft({
   const live = useRef({ otters, mood, layout, onPress });
   live.current = { otters, mood, layout, onPress };
   const reduced = useReducedMotion();
+  const bornAt = useRef(0);
 
   // keep the otters in step with the accounts and the mood
   useEffect(() => {
     const r = raftRef.current;
     if (!r) return;
-    r.setOtters(otters, performance.now() / 1000, false);
+    // the accounts usually arrive a moment after the pool: they still get the entrance
+    const rising = intro && !reduced && performance.now() - bornAt.current < 1500;
+    r.setOtters(otters, performance.now() / 1000, rising);
     r.mood = mood;
     const { w, h } = sizeRef.current;
     if (w > 0) r.layout({ width: w, height: h, ...layout });
-  }, [otters, mood, layout]);
+  }, [otters, mood, layout, intro, reduced]);
 
   useEffect(() => {
     trackPointer();
@@ -60,6 +63,7 @@ export function OtterRaft({
 
     const raft = new Raft();
     raftRef.current = raft;
+    bornAt.current = performance.now();
     raft.setOtters(live.current.otters, performance.now() / 1000, intro && !reduced);
     raft.mood = live.current.mood;
 
