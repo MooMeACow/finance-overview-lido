@@ -56,7 +56,7 @@ export function ToastHost() {
             animationKeyframes: { '0%': { opacity: 0, transform: 'translateY(14px) scale(0.97)' }, '100%': { opacity: 1, transform: 'translateY(0px) scale(1)' } },
             animationDuration: '280ms',
             animationTimingFunction: motion.easeOut,
-            animationFillMode: 'both',
+            animationFillMode: 'backwards',
             transitionProperty: 'opacity, transform',
             transitionDuration: '200ms',
           }),

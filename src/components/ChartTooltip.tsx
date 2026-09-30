@@ -26,7 +26,7 @@ export function ChartTooltip({ title, lines, align = 'center' }: { title: string
           animationKeyframes: { '0%': { opacity: 0, transform: 'translateY(4px) scale(0.97)' }, '100%': { opacity: 1, transform: 'translateY(0px) scale(1)' } },
           animationDuration: '130ms',
           animationTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
-          animationFillMode: 'both',
+          animationFillMode: 'backwards',
           transformOrigin: '50% 100%',
         }),
       ]}

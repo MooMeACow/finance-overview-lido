@@ -49,7 +49,7 @@ export function BeadRope({
                   animationDuration: '260ms',
                   animationTimingFunction: 'cubic-bezier(0.23, 1, 0.32, 1)',
                   animationDelay: `${delay + i * 14}ms`,
-                  animationFillMode: 'both',
+                  animationFillMode: 'backwards',
                 }),
             ]}
           />

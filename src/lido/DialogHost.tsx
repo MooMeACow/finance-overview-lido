@@ -63,7 +63,7 @@ export function DialogHost() {
             animationKeyframes: { '0%': { opacity: 0 }, '100%': { opacity: 1 } },
             animationDuration: '180ms',
             animationTimingFunction: motion.easeOut,
-            animationFillMode: 'both',
+            animationFillMode: 'backwards',
           }),
           leaving && { opacity: 0 },
           web({ transitionProperty: 'opacity', transitionDuration: '140ms' }),
@@ -88,7 +88,7 @@ export function DialogHost() {
               },
               animationDuration: '220ms',
               animationTimingFunction: motion.easeOut,
-              animationFillMode: 'both',
+              animationFillMode: 'backwards',
             }),
           ]}
         >

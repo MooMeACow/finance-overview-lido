@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -58,12 +58,14 @@ export function Sheet({
   const reduced = useReducedMotion();
   const { mounted, leaving } = usePresence(visible);
 
-  // Where the click came from, captured when the card opens: it grows from that direction
-  const from = useMemo(() => {
-    if (!visible || pointer.x < 0) return { x: 0, y: 0 };
-    return { x: (pointer.x - vw / 2) * 0.22, y: (pointer.y - vh / 2) * 0.22 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  // Where the click came from, captured when the card opens: it grows from that direction.
+  // Kept while the card closes, so its entrance isn't rebuilt (and replayed) on the way out.
+  const opened = useRef<{ x: number; y: number } | null>(null);
+  if (!mounted) opened.current = null;
+  else if (visible && !opened.current) {
+    opened.current = pointer.x < 0 ? { x: 0, y: 0 } : { x: (pointer.x - vw / 2) * 0.22, y: (pointer.y - vh / 2) * 0.22 };
+  }
+  const from = opened.current ?? { x: 0, y: 0 };
 
   if (!mounted) return null;
   const split = isWide && !!preview;
@@ -141,7 +143,7 @@ export function Sheet({
                     },
                 animationDuration: reduced ? '160ms' : '440ms',
                 animationTimingFunction: motion.easeDrawer,
-                animationFillMode: 'both',
+                animationFillMode: 'backwards',
                 transitionProperty: 'opacity, transform',
                 transitionDuration: `${EXIT_MS}ms`,
                 transitionTimingFunction: motion.easeOut,
@@ -177,7 +179,7 @@ export function Sheet({
                 : { '0%': { transform: 'translateY(100%)' }, '100%': { transform: 'translateY(0%)' } },
               animationDuration: reduced ? '160ms' : '380ms',
               animationTimingFunction: motion.easeDrawer,
-              animationFillMode: 'both',
+              animationFillMode: 'backwards',
               transitionProperty: 'opacity, transform',
               transitionDuration: `${EXIT_MS}ms`,
             }),
